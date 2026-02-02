@@ -1,0 +1,15 @@
+<div class="wrap">
+    <h1>{{ strings.title }}</h1>
+
+    {% if is_standalone %}
+        {% include 'nav-menus-standalone.twig' %}
+    {% elseif set_up_wizard_run %}
+        {% include 'nav-menus-full.twig' %}
+    {% else %}
+        <nav class="wcml-tabs wpml-tabs"></nav>
+    {% endif %}
+
+    <div class="wcml-wrap">
+    {{ content|raw }}
+    </div>
+</div>

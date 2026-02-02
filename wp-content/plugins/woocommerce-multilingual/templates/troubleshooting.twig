@@ -1,0 +1,150 @@
+<div class="wrap wcml_trblsh">
+    <h2>{{ header.title }}</h2>
+    <div class="wcml_trbl_warning">
+        <h3>{{ header.warning }}</h3>
+    </div>
+    <div class="wcml_trbl_status">
+			<h3>{{ status.title }}</h3>
+			<ul class="ul-square">
+			{% for statusItem in status.items %}
+				<li>{{ statusItem|raw }}</li>
+			{% endfor %}
+			</ul>
+		</div>
+		<div class="wcml_trbl_section">
+			<h3>{{ synchronizeData.title }}</h3>
+			<ul>
+				<li>
+					<label>
+						<input type="checkbox" id="wcml_sync_product_variations" />
+						{{ synchronizeData.items.variations }}
+					</label>
+					<span class="counter">{{ counter|raw }}</span>
+				</li>
+				{% if synchronizeData.galleryEnable %}
+					<li>
+						<label>
+							<input type="checkbox" id="wcml_sync_gallery_images" />
+							{{ synchronizeData.items.gallery }}
+						</label>
+						<span class="counter">{{ counter|raw }}</span>
+					</li>
+				{% endif %}
+				<li>
+					<label>
+						<input type="checkbox" id="wcml_sync_categories" />
+						{{ synchronizeData.items.categoriesMetadata }}
+					</label>
+					<span class="counter">{{ counter|raw }}</span>
+				</li>
+				<li>
+					<label>
+						<input type="checkbox" id="wcml_sync_stock" />
+						{{ synchronizeData.items.stock }}
+					</label>
+					<span class="counter">{{ counter|raw }}</span>
+				</li>
+			</ul>
+		</div>
+		<div class="wcml_trbl_section">
+			<h3>{{ connect.title }}</h3>
+			<ul>
+				<li>
+					<label>
+						<input type="checkbox" id="wcml_fix_relationships" />
+						{{ connect.items.variations }}
+					</label>
+					<span class="counter">{{ counter|raw }}</span>
+				</li>
+			</ul>
+		</div>
+		<div class="wcml_trbl_section">
+			<h3>{{ taxonomies.title }}</h3>
+			<ul>
+				{% if taxonomies.productTypeEnable %}
+					<li>
+						<label>
+						<input type="checkbox" id="wcml_translate_product_type" />
+						{{ taxonomies.items.productType }}
+						</label>
+						<span class="doing">{{ doing }}</span>
+						<span class="done">{{ done }}</span>
+					</li>
+				{% endif %}
+				<li>
+					<label>
+							<input type="checkbox" id="wcml_duplicate_terms" {% if taxonomies.data.attributes is empty %}disabled="disabled"{% endif %} />
+							{{ taxonomies.items.attributes }}
+							<select id="attr_to_duplicate" {% if taxonomies.data.attributes is empty %}disabled="disabled"{% endif %} >
+								{% if taxonomies.data.attributes is empty %}
+									<option value="0" >{{ taxonomies.data.none }}</option>
+								{% endif %}
+								{% set terms_count = 0 %}
+								{% for tax in taxonomies.data.attributes %}
+									<option value="{{ tax.tax_key|e }}">
+										{{ tax.labels.name|capitalize }}
+									</option>
+								{% endfor %}
+							</select>
+					</label>
+					<span class="counter">{{ counter|raw }}</span>
+				</li>
+				<li>{{ taxonomies.link|raw }}</li>
+			</ul>
+		</div>
+		{% if reviews.reviewsEnable %}
+			<div class="wcml_trbl_section">
+				<h3>{{ reviews.title }}</h3>
+				<ul>
+					<li>
+						<label>
+							<input type="checkbox" id="register_reviews_in_st" />
+							{{ reviews.items.register }}
+						</label>
+						<span class="doing">{{ doing }}</span>
+						<span class="done">{{ done }}</span>
+					</li>
+					<li>{{ reviews.link|raw }}</li>
+				</ul>
+			</div>
+		{% endif %}
+		<div class="wcml_trbl_section">
+			<h3>{{ cleanup.title }}</h3>
+			<ul>
+				<li>
+					<label>
+							<input type="checkbox" id="wcml_sync_deleted_meta" />
+							{{ cleanup.items.orphanedMeta }}
+					</label>
+					<span class="counter">{{ counter|raw }}</span>
+				</li>
+			</ul>
+		</div>
+		<div class="wcml_trbl_action">
+			<button type="button" class="button-primary" id="wcml_trbl_run">{{ run.start }}</button>
+			<span class="spinner"></span>
+		</div>
+		<div class="wcml_trbl_warning wcml_trbl_error">
+        <h3>{{ error }}</h3>
+    </div>
+		<div>
+			<ul>
+				<li>
+					{{ nonces.trbl_update_count|raw }}
+					{{ nonces.trbl_sync_variations|raw }}
+					{{ nonces.trbl_gallery_images|raw }}
+					{{ nonces.trbl_sync_categories|raw }}
+					{{ nonces.trbl_product_type_terms|raw }}
+					{{ nonces.trbl_duplicate_terms|raw }}
+					{{ nonces.trbl_sync_stock|raw }}
+					{{ nonces.fix_relationships|raw }}
+					{{ nonces.sync_deleted_meta|raw }}
+					{{ nonces.register_reviews_in_st|raw }}
+				</li>
+			</ul>
+    </div>
+		<div class="wcml_trbl_status">
+      <h3>{{ settings.title }}</h3>
+			<textarea style="font-size:12px;width:100%;margin-bottom:10px" wrap="off" rows="16" readonly="readonly">{{ settings.data|raw }}</textarea>
+		</div>
+</div>

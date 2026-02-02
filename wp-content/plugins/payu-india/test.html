@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PayU Authorization Header Generator</title>
+    <!-- CryptoJS CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body>
+    <h2>PayU Authorization Header Generator</h2>
+    
+    <label>Merchant Key:</label>
+    <input type="text" id="key" value="ltxgea" placeholder="Enter merchant key">
+    <br><br>
+    
+    <label>Merchant Secret:</label>
+    <input type="text" id="secret" value="UiWf8CgzRTetgBrjQ8qcob83uPLJCsGB" placeholder="Enter merchant secret">
+    <br><br>
+    
+    <button onclick="generateAuth()">Generate Authorization</button>
+    <br><br>
+    
+    <label>Date:</label>
+    <input type="text" id="dateOutput" readonly>
+    <br><br>
+    
+    <label>Authorization Header:</label>
+    <textarea id="authOutput" readonly rows="4" style="width: 100%;"></textarea>
+
+    <script>
+        function generateAuth() {
+            var merchant_key = document.getElementById('key').value;
+            var merchant_secret = document.getElementById('secret').value;
+
+            // date
+            var date = new Date();
+            // var date = "Wed, 28 Jun 2023 11:25:19 GMT";
+            date = new Date().toUTCString();
+
+            document.getElementById('dateOutput').value = date;
+
+            // authorization
+            var authorization = getAuthHeader(date, merchant_key, merchant_secret);
+            
+            document.getElementById('authOutput').value = authorization;
+            
+            console.log("Date: ", date);
+            console.log("Authorization: ", authorization);
+        }
+         
+        function getAuthHeader(date, merchant_key, merchant_secret) {
+            var AUTH_TYPE = 'sha512';
+            var data = isEmpty(undefined) ? "" : undefined;  // For settlement/range API, data is empty
+            var hash_string = data + '|' + date + '|' + merchant_secret;
+            console.log("Hash String is ", hash_string);
+            var hash = CryptoJS.SHA512(hash_string).toString(CryptoJS.enc.Hex);
+            var authHeader = 'hmac username="' + merchant_key + '", ' + 'algorithm="' + AUTH_TYPE + '", headers="date", signature="' + hash + '"'
+            return authHeader;
+        }
+
+        function isEmpty(value) {
+            return (
+                value === undefined ||
+                value === null ||
+                value === "" ||
+                (typeof value === "object" && Object.keys(value).length === 0)
+            );
+        }
+
+        // Generate on page load
+        window.onload = function() {
+            generateAuth();
+        }
+    </script>
+</body>
+</html>
