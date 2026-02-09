@@ -247,6 +247,15 @@ function payu_payment_links_load_gateway() {
 		return;
 	}
 
+	// Load template functions
+	require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payu-template-functions.php';
+
+	// Load form handler
+	require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payu-form-handler.php';
+
+	// Register AJAX handler for AJAX form submission
+	add_action( 'wp_ajax_payu_save_currency_config', 'payu_ajax_save_currency_config' );
+
 	// Load the payment gateway class file
 	$gateway_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-wc-gateway-payu-links.php';
 

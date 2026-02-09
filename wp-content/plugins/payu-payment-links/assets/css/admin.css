@@ -1,0 +1,278 @@
+/**
+ * PayU Payment Links Admin Styles
+ *
+ * @package PayU_Payment_Links
+ */
+
+.payu-payment-links-admin-wrapper {
+	text-align: left;
+}
+
+.payu-payment-links-admin-wrapper h2 {
+	margin: 20px 0 15px 0;
+	padding: 0;
+}
+
+.payu-payment-links-admin-wrapper > p {
+	margin: 15px 0;
+	padding: 0;
+}
+
+.payu-payment-links-admin-wrapper .notice {
+	margin: 20px 0;
+	padding: 15px;
+	text-align: left;
+}
+
+.payu-payment-links-admin-wrapper .notice p {
+	margin: 0 0 15px 0;
+	padding: 0;
+	font-size: 14px;
+}
+
+.payu-payment-links-admin-wrapper .notice p:last-child {
+	margin-bottom: 0;
+}
+
+/* AJAX Messages Container */
+.payu-ajax-messages {
+	margin: 15px 0;
+	padding: 12px;
+	border-left: 4px solid;
+	border-radius: 2px;
+	background: #fff;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.payu-ajax-messages.notice-success {
+	border-left-color: #46b450;
+	background-color: #f7fcf0;
+}
+
+.payu-ajax-messages.notice-error {
+	border-left-color: #dc3232;
+	background-color: #fcf0f1;
+}
+
+.payu-ajax-messages p {
+	margin: 0;
+	padding: 0;
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.payu-ajax-messages .notice-dismiss {
+	position: absolute;
+	top: 0;
+	right: 1px;
+	border: none;
+	margin: 0;
+	padding: 9px;
+	background: none;
+	cursor: pointer;
+}
+
+.payu-button-container {
+	margin: 20px 0;
+	padding: 0;
+	text-align: left;
+}
+
+.payu-button-container .button,
+.payu-button-container button.button {
+	margin-right: 8px;
+	margin-bottom: 0;
+	height: 32px;
+	line-height: 30px;
+	padding: 0 12px;
+	font-size: 13px;
+	vertical-align: top;
+}
+
+.payu-button-container .button:last-child {
+	margin-right: 0;
+}
+
+.payu-button-container .button-primary {
+	background: #2271b1;
+	border-color: #2271b1;
+	color: #fff;
+	text-decoration: none;
+	text-shadow: none;
+	box-shadow: 0 1px 0 #135e96;
+}
+
+.payu-button-container .button-primary:hover,
+.payu-button-container .button-primary:focus {
+	background: #135e96;
+	border-color: #135e96;
+	color: #fff;
+	box-shadow: 0 1px 0 #0a4b78;
+}
+
+.payu-button-container .button:not(.button-primary) {
+	background: #f6f7f7;
+	border-color: #dcdcde;
+	color: #2c3338;
+	text-decoration: none;
+	text-shadow: none;
+	box-shadow: 0 1px 0 #dcdcde;
+}
+
+.payu-button-container .button:not(.button-primary):hover,
+.payu-button-container .button:not(.button-primary):focus {
+	background: #f0f0f1;
+	border-color: #8c8f94;
+	color: #2c3338;
+	box-shadow: 0 1px 0 #8c8f94;
+}
+
+.payu-add-configuration-form {
+	display: none;
+	margin: 20px 0;
+	padding: 20px;
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	border-radius: 4px;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+	text-align: left;
+	overflow: hidden;
+}
+
+.payu-add-configuration-form.is-visible {
+	display: block;
+}
+
+.payu-add-configuration-form h3 {
+	margin: 0 0 15px 0;
+	padding: 0;
+	font-size: 14px;
+	font-weight: 600;
+	text-align: left;
+}
+
+.payu-add-configuration-form .form-table {
+	margin-top: 0;
+	margin-bottom: 0;
+	text-align: left;
+}
+
+.payu-add-configuration-form .form-table th {
+	padding: 20px 10px 20px 0;
+	width: 200px;
+	text-align: left;
+}
+
+.payu-add-configuration-form .form-table td {
+	padding: 15px 10px;
+	text-align: left;
+}
+
+.payu-add-configuration-form .submit {
+	margin: 20px 0 0 0;
+	padding: 0;
+	text-align: left;
+}
+
+.payu-add-configuration-form .submit .button {
+	margin-right: 8px;
+	height: 32px;
+	line-height: 30px;
+	padding: 0 12px;
+	font-size: 13px;
+}
+
+.payu-add-configuration-form .submit .button:last-child {
+	margin-right: 0;
+}
+
+/* Validation Styles */
+.payu-field-invalid {
+	border-color: #dc3232 !important;
+	box-shadow: 0 0 2px rgba(220, 50, 50, 0.8) !important;
+}
+
+.payu-field-error-container {
+	display: block;
+	margin-top: 5px;
+	min-height: 18px;
+}
+
+.payu-field-error {
+	display: block;
+	color: #dc3232;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.4;
+}
+
+.payu-field-error:before {
+	content: "\f534";
+	font-family: dashicons;
+	margin-right: 5px;
+	vertical-align: middle;
+}
+
+.payu-config-list {
+	margin: 20px 0;
+	padding: 0;
+	text-align: left;
+}
+
+.payu-config-list h3 {
+	margin: 0 0 15px 0;
+	padding: 0;
+	font-size: 14px;
+	font-weight: 600;
+	text-align: left;
+}
+
+.payu-config-list table {
+	width: 100%;
+	border-collapse: collapse;
+	text-align: left;
+}
+
+.payu-config-list table th {
+	text-align: left;
+	padding: 10px;
+}
+
+.payu-config-list table td {
+	text-align: left;
+	padding: 10px;
+}
+
+.payu-config-list .status-active {
+	color: #46b450;
+	font-weight: 600;
+}
+
+.payu-config-list .status-inactive {
+	color: #dc3232;
+	font-weight: 600;
+}
+
+.payu-config-list .status-invalid {
+	color: #f56e28;
+	font-weight: 600;
+}
+
+@media screen and (max-width: 782px) {
+	.payu-add-configuration-form .form-table th,
+	.payu-add-configuration-form .form-table td {
+		display: block;
+		width: 100%;
+		padding: 10px 0;
+		text-align: left;
+	}
+
+	.payu-add-configuration-form .form-table th {
+		padding-bottom: 5px;
+	}
+
+	.payu-button-container .button {
+		display: inline-block;
+		margin-bottom: 8px;
+	}
+}

@@ -21,158 +21,205 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 		$this->method_description = __( 'Generate PayU payment links via OneAPI for WooCommerce orders.', 'payu-payment-links' );
 		$this->has_fields         = false;
 		
-		// Initialize form fields and settings
-		$this->init_form_fields();
+		// Initialize settings
 		$this->init_settings();
 		
-		// Get settings
-		// $this->title       = $this->get_option( 'title', __( 'PayU Payment Links', 'payu-payment-links' ) );
-		// $this->description = $this->get_option( 'description', __( 'Pay via PayU payment link', 'payu-payment-links' ) );
-		// $this->enabled     = $this->get_option( 'enabled', 'no' );
-		
-		// Save settings
-		// add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
+		// Enqueue admin scripts and styles
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
 	}
-	
-	/**
-	 * Check if gateway needs setup
-	 *
-	 * @return bool
-	 */
-	public function needs_setup() {
-		// $client_id     = $this->get_option( 'client_id' );
-		// $client_secret = $this->get_option( 'client_secret' );
-		// $merchant_id   = $this->get_option( 'merchant_id' );
-		
-		// $is_missing = empty( $client_id ) || empty( $client_secret ) || empty( $merchant_id );
-		
-		// if ( $is_missing ) {
-		// 	error_log("PayU Setup Error: ID: $client_id, Secret: $client_secret, Merchant: $merchant_id");
-		// }
 
-		// return $is_missing;
-	}
-	
 	/**
-	 * Display admin settings
+	 * Display admin settings.
+	 * Always shows "Create PayU Account" CTA and "Add Configuration" button.
 	 */
 	public function admin_options() {
+		// Hide default WooCommerce "Save Changes" button since we use custom form
+		global $hide_save_button;
+		$hide_save_button = true;
+
 		?>
-		<h2><?php esc_html_e( 'PayU Payment Links', 'payu-payment-links' ); ?></h2>
-		
-		<?php if ( $this->needs_setup() ) : ?>
-			<div class="notice notice-info inline" style="margin: 20px 0; padding: 15px;">
-				<p style="margin: 0 0 15px 0; font-size: 14px;">
-					<strong><?php esc_html_e( 'PayU credentials are required to use this payment gateway.', 'payu-payment-links' ); ?></strong>
+		<div class="payu-payment-links-admin-wrapper">
+			<h2><?php esc_html_e( 'PayU Payment Links', 'payu-payment-links' ); ?></h2>
+
+			<?php
+			// Display admin notices if any
+			$this->display_admin_notices();
+
+			// Show PayU Account CTA - Register or Login
+			$signup_url = 'https://onboarding.payu.in/app/account/signup?partner_name=WooCommerce&partner_source=Affiliate+Links&partner_uuid=11eb-3a29-70592552-8c2b-0a696b110fde&source=Partner';
+			$login_url  = 'https://onboarding.payu.in/app/account/login';
+			?>
+				<p>
+					<?php
+					printf(
+						/* translators: %1$s: Sign up link, %2$s: Login link */
+						esc_html__( '%1$s for a PayU merchant account to get started or %2$s to your existing account.', 'payu-payment-links' ),
+						'<a href="' . esc_url( $signup_url ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Sign up', 'payu-payment-links' ) . '</a>',
+						'<a href="' . esc_url( $login_url ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'login', 'payu-payment-links' ) . '</a>'
+					);
+					?>
 				</p>
-				<p style="margin: 0 0 15px 0;">
-					<?php esc_html_e( 'Please configure your PayU credentials below or create a new PayU account to get started.', 'payu-payment-links' ); ?>
-				</p>
-				<p style="margin: 0;">
-					<a href="https://onboarding.payu.in/app/account/signup?partner_name=WooCommerce&partner_source=Affiliate+Links&partner_uuid=11eb-3a29-70592552-8c2b-0a696b110fde&source=Partner" 
-					   target="_blank" 
-					   class="button button-primary" 
-					   style="text-decoration: none;">
-						<?php esc_html_e( 'Create PayU Account', 'payu-payment-links' ); ?>
-					</a>
-					<span style="margin-left: 10px;">
-						<?php esc_html_e( 'or', 'payu-payment-links' ); ?>
-						<a href="https://onboarding.payu.in/app/account/login?partner_name=WooCommerce&partner_source=Affiliate+Links&partner_uuid=11eb-3a29-70592552-8c2b-0a696b110fde&source=Partner" 
-						   target="_blank" 
-						   style="margin-left: 5px;">
-							<?php esc_html_e( 'login to your existing account', 'payu-payment-links' ); ?>
-						</a>
-					</span>
-				</p>
+
+
+			<!-- Close WooCommerce form wrapper to allow our custom form -->
+			</form>
+
+			<!-- Add Configuration Button - always visible -->
+			<div class="payu-button-container">
+				<button type="button" id="payu-add-configuration-button" class="button button-primary" aria-expanded="false" aria-controls="payu-add-configuration-form">
+					<?php esc_html_e( 'Add Configuration', 'payu-payment-links' ); ?>
+				</button>
 			</div>
-		<?php endif; ?>
-		
-		<p><?php esc_html_e( 'Settings for PayU Payment Links gateway.', 'payu-payment-links' ); ?></p>
-		<table class="form-table">
-			<?php $this->generate_settings_html(); ?>
-		</table>
+
+			<!-- Add Configuration Form (initially hidden) -->
+			<?php $this->render_add_configuration_form(); ?>
+
+			<!-- Configuration List -->
+			<?php $this->render_configuration_list(); ?>
+		</div>
 		<?php
 	}
 
 	/**
-	 * Initialize form fields
+	 * Enqueue admin scripts and styles for PayU Payment Links admin page
+	 *
+	 * @param string $hook Current admin page hook.
+	 * @return void
 	 */
-	public function init_form_fields() {
-		$this->form_fields = array(
-			'enabled'       => array(
-				'title'   => __( 'Enable/Disable', 'payu-payment-links' ),
-				'type'    => 'checkbox',
-				'label'   => __( 'Enable PayU Payment Links', 'payu-payment-links' ),
-				'default' => 'no',
-			),
-			'title'         => array(
-				'title'       => __( 'Title', 'payu-payment-links' ),
-				'type'        => 'text',
-				'description' => __( 'This controls the title which the user sees during checkout.', 'payu-payment-links' ),
-				'default'     => __( 'PayU Payment Links', 'payu-payment-links' ),
-				'desc_tip'    => true,
-			),
-			'description'   => array(
-				'title'       => __( 'Description', 'payu-payment-links' ),
-				'type'        => 'textarea',
-				'description' => __( 'This controls the description which the user sees during checkout.', 'payu-payment-links' ),
-				'default'     => __( 'Pay via PayU payment link', 'payu-payment-links' ),
-				'desc_tip'    => true,
-			),
-			'client_id'     => array(
-				'title'       => __( 'Client ID', 'payu-payment-links' ),
-				'type'        => 'text',
-				'description' => __( 'Your PayU Client ID from the PayU dashboard.', 'payu-payment-links' ),
-				'default'     => '',
-				'desc_tip'    => true,
-			),
-			'client_secret' => array(
-				'title'       => __( 'Client Secret', 'payu-payment-links' ),
-				'type'        => 'password',
-				'description' => __( 'Your PayU Client Secret from the PayU dashboard.', 'payu-payment-links' ),
-				'default'     => '',
-				'desc_tip'    => true,
-			),
-			'merchant_id'  => array(
-				'title'       => __( 'Merchant ID', 'payu-payment-links' ),
-				'type'        => 'text',
-				'description' => __( 'Your PayU Merchant ID from the PayU dashboard.', 'payu-payment-links' ),
-				'default'     => '',
-				'desc_tip'    => true,
-			),
-			'mode'          => array(
-				'title'       => __( 'Mode', 'payu-payment-links' ),
-				'type'        => 'select',
-				'description' => __( 'Select test mode for testing or live mode for production.', 'payu-payment-links' ),
-				'default'     => 'test',
-				'options'     => array(
-					'test' => __( 'Sandbox', 'payu-payment-links' ),
-					'live' => __( 'Production', 'payu-payment-links' ),
-				),
-				'desc_tip'    => true,
-			),
-		);
+	public function enqueue_admin_assets( $hook ) {
+		// Only load on WooCommerce settings pages
+		if ( 'woocommerce_page_wc-settings' !== $hook ) {
+			return;
+		}
+
+		// Check if we're on the PayU Payment Links settings page
+		if ( isset( $_GET['section'] ) && 'payu_payment_links' === $_GET['section'] ) {
+			$plugin_url = plugin_dir_url( dirname( __FILE__ ) );
+			$version    = defined( 'PAYU_PAYMENT_LINKS_VERSION' ) ? PAYU_PAYMENT_LINKS_VERSION : '1.0.0';
+
+			// Enqueue CSS file
+			wp_enqueue_style(
+				'payu-payment-links-admin',
+				$plugin_url . 'assets/css/admin.css',
+				array( 'woocommerce_admin_styles' ),
+				$version
+			);
+
+			// Enqueue JavaScript file
+			wp_enqueue_script(
+				'payu-payment-links-admin',
+				$plugin_url . 'assets/js/admin.js',
+				array( 'jquery' ),
+				$version,
+				true
+			);
+		}
 	}
-	
+
 	/**
-	 * Process payment
+	 * Render Add Configuration form template.
+	 * Template function for form HTML rendering - reusable wherever needed.
+	 *
+	 * @return void
 	 */
-	// public function process_payment( $order_id ) {
-	// 	$order = wc_get_order( $order_id );
+	private function render_add_configuration_form() {
+		payu_render_configuration_form_template();
+	}
+
+	/**
+	 * Get all currency configurations from database (non-deleted only)
+	 *
+	 * @return array Array of configuration objects
+	 */
+	private function get_currency_configs() {
+		global $wpdb;
+		$table_name = $wpdb->prefix . 'payu_currency_configs';
 		
-	// 	// Mark as pending payment
-	// 	$order->update_status( 'pending', __( 'Awaiting PayU payment link payment', 'payu-payment-links' ) );
+		// Check if table exists
+		$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
 		
-	// 	// Reduce stock levels
-	// 	wc_reduce_stock_levels( $order_id );
+		if ( ! $table_exists ) {
+			return array();
+		}
 		
-	// 	// Remove cart
-	// 	WC()->cart->empty_cart();
+		$results = $wpdb->get_results(
+			"SELECT * FROM {$table_name} WHERE deleted_at IS NULL ORDER BY currency ASC, environment ASC",
+			OBJECT
+		);
 		
-	// 	// Return thankyou redirect
-	// 	return array(
-	// 		'result'   => 'success',
-	// 		'redirect' => $this->get_return_url( $order ),
-	// 	);
-	// }
+		return $results ? $results : array();
+	}
+
+	/**
+	 * Render the configuration list table
+	 * Template function for configuration listing HTML.
+	 *
+	 * @return void
+	 */
+	private function render_configuration_list() {
+		$configs = $this->get_currency_configs();
+		
+		if ( empty( $configs ) ) {
+			return;
+		}
+		?>
+		<div class="payu-config-list">
+			<h3><?php esc_html_e( 'Currency Configurations', 'payu-payment-links' ); ?></h3>
+			<table class="wp-list-table widefat fixed striped">
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'Currency', 'payu-payment-links' ); ?></th>
+						<th><?php esc_html_e( 'Merchant ID', 'payu-payment-links' ); ?></th>
+						<th><?php esc_html_e( 'Client ID', 'payu-payment-links' ); ?></th>
+						<th><?php esc_html_e( 'Environment', 'payu-payment-links' ); ?></th>
+						<th><?php esc_html_e( 'Status', 'payu-payment-links' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $configs as $config ) : ?>
+						<tr>
+							<td><strong><?php echo esc_html( $config->currency ); ?></strong></td>
+							<td><?php echo esc_html( $config->merchant_id ); ?></td>
+							<td><?php echo esc_html( $config->client_id ); ?></td>
+							<td><?php echo esc_html( strtoupper( $config->environment ) ); ?></td>
+							<td>
+								<span class="status-<?php echo esc_attr( $config->status ); ?>">
+									<?php echo esc_html( ucfirst( $config->status ) ); ?>
+								</span>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Display admin notices
+	 *
+	 * @return void
+	 */
+	private function display_admin_notices() {
+		// Check for success notice
+		if ( isset( $_GET['payu_config_saved'] ) && '1' === $_GET['payu_config_saved'] ) {
+			?>
+			<div class="notice notice-success is-dismissible">
+				<p><?php esc_html_e( 'Currency configuration saved successfully.', 'payu-payment-links' ); ?></p>
+			</div>
+			<?php
+		}
+
+		// Check for error notice
+		if ( isset( $_GET['payu_config_error'] ) ) {
+			$error_message = sanitize_text_field( $_GET['payu_config_error'] );
+			?>
+			<div class="notice notice-error is-dismissible">
+				<p><?php echo esc_html( $error_message ); ?></p>
+			</div>
+			<?php
+		}
+	}
+
+
 }
