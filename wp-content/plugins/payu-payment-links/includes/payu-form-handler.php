@@ -18,7 +18,6 @@ defined( 'ABSPATH' ) || exit;
 function payu_validate_currency_config_input( $post_data ) {
 	$field_errors = array();
 
-	// Currency validation
 	$currency = isset( $post_data['payu_config_currency'] ) ? sanitize_text_field( $post_data['payu_config_currency'] ) : '';
 	if ( empty( $currency ) ) {
 		$field_errors['payu_config_currency'] = __( 'Currency is required.', 'payu-payment-links' );
@@ -26,7 +25,6 @@ function payu_validate_currency_config_input( $post_data ) {
 		$field_errors['payu_config_currency'] = __( 'Invalid currency selected.', 'payu-payment-links' );
 	}
 
-	// Merchant ID validation
 	$merchant_id = isset( $post_data['payu_config_merchant_id'] ) ? sanitize_text_field( $post_data['payu_config_merchant_id'] ) : '';
 	if ( empty( $merchant_id ) ) {
 		$field_errors['payu_config_merchant_id'] = __( 'Merchant ID is required.', 'payu-payment-links' );
@@ -34,7 +32,6 @@ function payu_validate_currency_config_input( $post_data ) {
 		$field_errors['payu_config_merchant_id'] = __( 'Merchant ID must not exceed 100 characters.', 'payu-payment-links' );
 	}
 
-	// Client ID validation
 	$client_id = isset( $post_data['payu_config_client_id'] ) ? sanitize_text_field( $post_data['payu_config_client_id'] ) : '';
 	if ( empty( $client_id ) ) {
 		$field_errors['payu_config_client_id'] = __( 'Client ID is required.', 'payu-payment-links' );
@@ -42,13 +39,11 @@ function payu_validate_currency_config_input( $post_data ) {
 		$field_errors['payu_config_client_id'] = __( 'Client ID must not exceed 255 characters.', 'payu-payment-links' );
 	}
 
-	// Client Secret validation
 	$client_secret = isset( $post_data['payu_config_client_secret'] ) ? sanitize_textarea_field( $post_data['payu_config_client_secret'] ) : '';
 	if ( empty( $client_secret ) ) {
 		$field_errors['payu_config_client_secret'] = __( 'Client Secret is required.', 'payu-payment-links' );
 	}
 
-	// Environment validation
 	$environment = isset( $post_data['payu_config_environment'] ) ? sanitize_text_field( $post_data['payu_config_environment'] ) : 'uat';
 	if ( ! in_array( $environment, array( 'uat', 'prod' ), true ) ) {
 		$environment = 'uat';
@@ -72,20 +67,22 @@ function payu_validate_currency_config_input( $post_data ) {
 }
 
 /**
- * Check if currency + environment combination is unique
+ * Check if currency + merchant_id + environment combination is unique.
  *
  * @param string $currency    Currency code.
+ * @param string $merchant_id Merchant ID.
  * @param string $environment Environment (uat/prod).
- * @return bool True if unique, false if exists.
+ * @return bool True if unique, false if an identical record exists.
  */
-function payu_is_currency_environment_unique( $currency, $environment ) {
+function payu_is_currency_environment_unique( $currency, $merchant_id, $environment ) {
 	global $wpdb;
 	$table_name = $wpdb->prefix . 'payu_currency_configs';
 
 	$existing = $wpdb->get_var(
 		$wpdb->prepare(
-			"SELECT COUNT(*) FROM {$table_name} WHERE currency = %s AND environment = %s AND deleted_at IS NULL",
+			"SELECT COUNT(*) FROM {$table_name} WHERE currency = %s AND merchant_id = %s AND environment = %s AND deleted_at IS NULL",
 			$currency,
+			$merchant_id,
 			$environment
 		)
 	);
@@ -101,59 +98,207 @@ function payu_is_currency_environment_unique( $currency, $environment ) {
  */
 function payu_save_currency_config_to_db( $data ) {
 	global $wpdb;
+
 	$table_name = $wpdb->prefix . 'payu_currency_configs';
 
-	// Check if table exists
-	$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
-	if ( ! $table_exists ) {
+	// Ensure table exists
+	$table_exists = $wpdb->get_var(
+		$wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name )
+	);
+
+	if ( $table_exists !== $table_name ) {
 		return false;
 	}
 
-	$result = $wpdb->insert(
-		$table_name,
-		array(
-			'currency'      => $data['currency'],
-			'merchant_id'   => $data['merchant_id'],
-			'client_id'     => $data['client_id'],
-			'client_secret' => $data['client_secret'],
-			'environment'   => $data['environment'],
-			'status'        => 'active',
-		),
-		array( '%s', '%s', '%s', '%s', '%s', '%s' )
+	// Sanitize input
+	$currency      = sanitize_text_field( $data['currency'] );
+	$merchant_id   = sanitize_text_field( $data['merchant_id'] );
+	$client_id     = sanitize_text_field( $data['client_id'] );
+	$environment   = sanitize_text_field( $data['environment'] );
+	$client_secret = $data['client_secret'];
+
+	// Encrypt client secret
+	$encrypted_secret = payu_encrypt_client_secret( $client_secret );
+	if ( false === $encrypted_secret ) {
+		return false;
+	}
+
+	$wpdb->query( 'START TRANSACTION' );
+
+	$existing = $wpdb->get_row(
+		$wpdb->prepare(
+				"SELECT id FROM {$table_name}
+				WHERE currency = %s
+				AND merchant_id = %s
+				AND status = 'active'
+				AND deleted_at IS NULL
+				LIMIT 1",
+				$currency,
+				$merchant_id
+			),
+			ARRAY_A
 	);
 
-	return $result ? $wpdb->insert_id : false;
+	if ( $existing ) {
+		$wpdb->update(
+			$table_name,
+			array(
+				'status'     => 'inactive',
+				'updated_at' => current_time('mysql'),
+			),
+			array( 'id' => $existing['id'] ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+	}
+
+	$inserted = $wpdb->insert(
+		$table_name,
+		array(
+			'currency'      => $currency,
+			'merchant_id'   => $merchant_id,
+			'client_id'     => $client_id,
+			'client_secret' => $encrypted_secret,
+			'environment'   => $environment,
+			'status'        => 'active',
+			'created_at'    => current_time( 'mysql' ),
+			'updated_at'    => current_time( 'mysql' ),
+		),
+		array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
+	);
+
+	if ( false === $inserted ) {
+		$wpdb->query( 'ROLLBACK' );
+		return false;
+	}
+
+	$wpdb->query( 'COMMIT' );
+
+	return $wpdb->insert_id;
 }
 
 /**
- * Verify PayU API credentials by making a test API call
- * This validates that the provided credentials are valid and can authenticate with PayU
+ * Get encryption key for client secrets
+ * Uses WordPress standard approach: custom constant or wp_salt() fallback
+ *
+ * @return string Encryption key.
+ */
+function payu_get_encryption_key() {
+	// Use custom constant from wp-config.php if defined (WordPress best practice)
+	if ( defined( 'PAYU_ENCRYPTION_KEY' ) && ! empty( PAYU_ENCRYPTION_KEY ) ) {
+		return PAYU_ENCRYPTION_KEY;
+	}
+
+	// Note: If wp_salt rotates, decryption will fail - recommend defining PAYU_ENCRYPTION_KEY in wp-config.php
+	return wp_salt( 'secure_auth' );
+}
+
+/**
+ * Encrypt client secret using WordPress standard encryption approach
+ * Uses AES-256-CBC with key from wp-config.php constant or wp_salt()
+ *
+ * @param string $client_secret Plain text client secret.
+ * @return string|false Encrypted secret on success, false on failure.
+ */
+function payu_encrypt_client_secret( $client_secret ) {
+	if ( empty( $client_secret ) ) {
+		return false;
+	}
+
+	// Use OpenSSL if available (WordPress standard approach)
+	if ( function_exists( 'openssl_encrypt' ) && function_exists( 'openssl_random_pseudo_bytes' ) ) {
+		$method = 'AES-256-CBC';
+		$key = hash( 'sha256', payu_get_encryption_key(), true );
+		$iv_length = openssl_cipher_iv_length( $method );
+		
+		if ( false === $iv_length ) {
+			return false;
+		}
+
+		$iv = openssl_random_pseudo_bytes( $iv_length );
+		
+		if ( false === $iv ) {
+			return false;
+		}
+
+		$encrypted = openssl_encrypt( $client_secret, $method, $key, OPENSSL_RAW_DATA, $iv );
+		if ( false === $encrypted ) {
+			return false;
+		}
+
+		return base64_encode( $iv . $encrypted );
+	}
+
+	return base64_encode( $client_secret );
+}
+
+/**
+ * Decrypt client secret using WordPress standard encryption approach
+ *
+ * @param string $encrypted_secret Encrypted client secret.
+ * @return string|false Decrypted secret on success, false on failure.
+ */
+function payu_decrypt_client_secret( $encrypted_secret ) {
+	if ( empty( $encrypted_secret ) ) {
+		return false;
+	}
+
+	$decoded = base64_decode( $encrypted_secret, true );
+	if ( false === $decoded ) {
+		return false;
+	}
+
+	if ( function_exists( 'openssl_decrypt' ) && strlen( $decoded ) > 16 ) {
+		$method = 'AES-256-CBC';
+		$iv_length = openssl_cipher_iv_length( $method );
+		
+		if ( false === $iv_length || strlen( $decoded ) < $iv_length ) {
+			// Not encrypted with OpenSSL, try base64 decode
+			return base64_decode( $encrypted_secret, true );
+		}
+
+		$iv = substr( $decoded, 0, $iv_length );
+		$encrypted = substr( $decoded, $iv_length );
+		$key = hash( 'sha256', payu_get_encryption_key(), true );
+
+		$decrypted = openssl_decrypt( $encrypted, $method, $key, OPENSSL_RAW_DATA, $iv );
+		if ( false !== $decrypted ) {
+			return $decrypted;
+		}
+	}
+
+	return $decoded;
+}
+
+/**
+ * Verify PayU API credentials by calling Payment Links Token API
+ * This validates that the provided credentials are valid and can generate a payment token
+ * Reference: https://docs.payu.in/reference/get-token-api-for-payment-links
  *
  * @param string $merchant_id   Merchant ID.
  * @param string $client_id      Client ID.
  * @param string $client_secret  Client Secret.
  * @param string $environment    Environment (uat/prod).
- * @return array|WP_Error Array with 'success' => true on success, WP_Error on failure.
+ * @return array|WP_Error Array with 'success' => true and token data on success, WP_Error on failure.
  */
 function payu_verify_api_credentials( $merchant_id, $client_id, $client_secret, $environment ) {
-	// Determine API base URL based on environment
+	// Payment Links API uses accounts.payu.in (not api.payu.in)
 	$api_base_url = ( 'prod' === $environment ) 
-		? 'https://api.payu.in' 
-		: 'https://sandbox.payu.in';
+		? 'https://accounts.payu.in' 
+		: 'https://uat-accounts.payu.in';
 
-	// PayU OneAPI authentication endpoint
 	$auth_url = $api_base_url . '/oauth/token';
 
-	// Prepare authentication request
-	$auth_data = array(
-		'grant_type' => 'client_credentials',
-		'client_id' => $client_id,
+		$auth_data = array(
+		'grant_type'   => 'client_credentials',
+		'client_id'    => $client_id,
 		'client_secret' => $client_secret,
+		'scope'        => 'create_payment_links update_payment_links read_payment_links',
 	);
 
 	$request_args = array(
 		'method'      => 'POST',
-		'timeout'     => 10,
+		'timeout'     => 15, 
 		'redirection' => 5,
 		'httpversion' => '1.1',
 		'blocking'    => true,
@@ -166,15 +311,10 @@ function payu_verify_api_credentials( $merchant_id, $client_id, $client_secret, 
 
 	$response = wp_remote_post( $auth_url, $request_args );
 
-	// Check for request errors
 	if ( is_wp_error( $response ) ) {
 		return new WP_Error(
 			'api_connection_error',
-			sprintf(
-				/* translators: %s: Error message */
-				__( 'Unable to connect to PayU API: %s', 'payu-payment-links' ),
-				$response->get_error_message()
-			)
+			__( 'Unable to connect to PayU API. Please check your internet connection.', 'payu-payment-links' )
 		);
 	}
 
@@ -182,32 +322,106 @@ function payu_verify_api_credentials( $merchant_id, $client_id, $client_secret, 
 	$response_body = wp_remote_retrieve_body( $response );
 	$response_data = json_decode( $response_body, true );
 
-	// Check HTTP response code
-	if ( 200 !== $response_code ) {
-		$error_message = isset( $response_data['error_description'] ) 
-			? $response_data['error_description'] 
-			: __( 'Invalid credentials. Please verify your Client ID and Client Secret.', 'payu-payment-links' );
-		
-		return new WP_Error(
-			'api_auth_error',
-			$error_message
-		);
-	}
+	switch ( $response_code ) {
+		case 200:
+			if ( ! isset( $response_data['access_token'] ) || empty( $response_data['access_token'] ) ) {
+				return new WP_Error(
+					'api_auth_error',
+					__( 'Invalid Credential: Access token not received from PayU API.', 'payu-payment-links' )
+				);
+			}
 
-	// Check if access token was received
-	if ( ! isset( $response_data['access_token'] ) || empty( $response_data['access_token'] ) ) {
-		return new WP_Error(
-			'api_auth_error',
-			__( 'Invalid API response. Please verify your credentials.', 'payu-payment-links' )
-		);
-	}
+			global $wpdb;
+			$table_name = $wpdb->prefix . 'payu_currency_configs';
 
-	// Credentials are valid
-	return array(
-		'success'      => true,
-		'access_token' => $response_data['access_token'],
-		'message'      => __( 'Credentials verified successfully.', 'payu-payment-links' ),
-	);
+			$existing_merchant = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT currency FROM {$table_name}
+					WHERE merchant_id = %s
+					AND deleted_at IS NULL
+					LIMIT 1",
+					sanitize_text_field( $merchant_id )
+				)
+			);
+
+			if ( $existing_merchant ) {
+				return new WP_Error(
+					'merchant_already_allocated',
+					sprintf(
+						__( 'This Merchant ID is already allocated to currency: %s. Please use a different Merchant ID.', 'payu-payment-links' ),
+						esc_html( $existing_merchant )
+					)
+				);
+			}
+
+			$scope = isset( $response_data['scope'] ) ? sanitize_text_field( $response_data['scope'] ) : '';
+			$required_scopes = array( 'create_payment_links', 'update_payment_links', 'read_payment_links' );
+			$scope_array = ! empty( $scope ) ? explode( ' ', $scope ) : array();
+			
+			$has_required_scope = false;
+			foreach ( $required_scopes as $required_scope ) {
+				if ( in_array( $required_scope, $scope_array, true ) ) {
+					$has_required_scope = true;
+					break;
+				}
+			}
+			
+			if ( ! $has_required_scope ) {
+				return new WP_Error(
+					'api_auth_error',
+					__( 'Invalid Credential: Token does not have required Payment Links permissions.', 'payu-payment-links' )
+				);
+			}
+
+			return array(
+				'success'      => true,
+				'access_token' => sanitize_text_field( $response_data['access_token'] ),
+				'token_type'   => isset( $response_data['token_type'] ) ? sanitize_text_field( $response_data['token_type'] ) : 'Bearer',
+				'expires_in'   => isset( $response_data['expires_in'] ) ? absint( $response_data['expires_in'] ) : 0,
+				'scope'        => $scope,
+				'created_at'   => isset( $response_data['created_at'] ) ? absint( $response_data['created_at'] ) : time(),
+				'message'      => __( 'Payment token generated successfully.', 'payu-payment-links' ),
+			);
+
+		case 400:
+			return new WP_Error(
+				'api_auth_error',
+				__( 'Invalid Credential: Invalid request parameters.', 'payu-payment-links' )
+			);
+
+		case 401:
+			return new WP_Error(
+				'api_auth_error',
+				__( 'Invalid Credential: Client ID or Client Secret is incorrect.', 'payu-payment-links' )
+			);
+
+		case 403:
+			return new WP_Error(
+				'api_auth_error',
+				__( 'Invalid Credential: Insufficient permissions.', 'payu-payment-links' )
+			);
+
+		case 429:
+			return new WP_Error(
+				'api_rate_limit_error',
+				__( 'Too many requests. Please try again later.', 'payu-payment-links' )
+			);
+
+		case 500:
+		case 502:
+		case 503:
+		case 504:
+			return new WP_Error(
+				'api_server_error',
+				__( 'PayU server error. Please try again later.', 'payu-payment-links' )
+			);
+
+		default:
+			return new WP_Error(
+				'api_auth_error',
+				__( 'Invalid Credential: Unable to verify credentials.', 'payu-payment-links' )
+			);
+	}
 }
 
 /**
@@ -217,7 +431,13 @@ function payu_verify_api_credentials( $merchant_id, $client_id, $client_secret, 
  * @return void
  */
 function payu_ajax_save_currency_config() {
-	// Verify nonce
+	if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( $_SERVER['REQUEST_METHOD'] ) : '' ) ) {
+		wp_send_json_error( array(
+			'message' => __( 'Invalid request method.', 'payu-payment-links' ),
+		) );
+		return;
+	}
+
 	if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'payu_save_currency_config' ) ) {
 		wp_send_json_error( array(
 			'message' => __( 'Security check failed. Please refresh the page and try again.', 'payu-payment-links' ),
@@ -225,7 +445,6 @@ function payu_ajax_save_currency_config() {
 		return;
 	}
 
-	// Check user capabilities
 	if ( ! current_user_can( 'manage_woocommerce' ) ) {
 		wp_send_json_error( array(
 			'message' => __( 'You do not have permission to perform this action.', 'payu-payment-links' ),
@@ -233,11 +452,9 @@ function payu_ajax_save_currency_config() {
 		return;
 	}
 
-	// Validate and sanitize input
 	$validation_result = payu_validate_currency_config_input( $_POST );
 
 	if ( is_wp_error( $validation_result ) ) {
-		// Extract field-specific errors
 		$field_errors = array();
 		$error_codes = $validation_result->get_error_codes();
 		foreach ( $error_codes as $code ) {
@@ -255,30 +472,13 @@ function payu_ajax_save_currency_config() {
 
 	$sanitized_data = $validation_result;
 
-	// Check uniqueness (Currency + Environment combination)
-	if ( ! payu_is_currency_environment_unique( $sanitized_data['currency'], $sanitized_data['environment'] ) ) {
-		$field_errors = array(
-			'payu_config_currency' => sprintf(
-				/* translators: %1$s: Currency code, %2$s: Environment */
-				__( 'A configuration for %1$s (%2$s) already exists.', 'payu-payment-links' ),
-				esc_html( $sanitized_data['currency'] ),
-				esc_html( strtoupper( $sanitized_data['environment'] ) )
-			),
-		);
-
+	if ( ! payu_is_currency_environment_unique( $sanitized_data['currency'], $sanitized_data['merchant_id'], $sanitized_data['environment'] ) ) {
 		wp_send_json_error( array(
-			'message' => sprintf(
-				/* translators: %1$s: Currency code, %2$s: Environment */
-				__( 'A configuration for %1$s (%2$s) already exists.', 'payu-payment-links' ),
-				esc_html( $sanitized_data['currency'] ),
-				esc_html( strtoupper( $sanitized_data['environment'] ) )
-			),
-			'field_errors' => $field_errors,
+			'message' => __( 'This configuration already exists. Please use a different Currency, Merchant ID, or Environment.', 'payu-payment-links' )
 		) );
 		return;
 	}
 
-	// Verify PayU API credentials (third-party API verification)
 	$api_verification = payu_verify_api_credentials(
 		$sanitized_data['merchant_id'],
 		$sanitized_data['client_id'],
@@ -287,31 +487,20 @@ function payu_ajax_save_currency_config() {
 	);
 
 	if ( is_wp_error( $api_verification ) ) {
-		// API errors typically relate to Client ID and Client Secret
-		$field_errors = array();
-		$error_code = $api_verification->get_error_code();
-		
-		if ( 'api_auth_error' === $error_code ) {
-			// Authentication failed - likely Client ID or Client Secret issue
-			$field_errors['payu_config_client_id'] = __( 'Invalid credentials.', 'payu-payment-links' );
-			$field_errors['payu_config_client_secret'] = __( 'Invalid credentials.', 'payu-payment-links' );
-		} else {
-			// Connection error - show general message
-			$field_errors['payu_config_client_secret'] = $api_verification->get_error_message();
+		// Log error securely (without exposing secrets)
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( sprintf(
+				'PayU Payment Links: API verification failed - %s',
+				$api_verification->get_error_code()
+			) );
 		}
 
 		wp_send_json_error( array(
-			'message' => sprintf(
-				/* translators: %s: API error message */
-				__( 'API Verification Failed: %s', 'payu-payment-links' ),
-				$api_verification->get_error_message()
-			),
-			'field_errors' => $field_errors,
+			'message' => $api_verification->get_error_message(),
 		) );
 		return;
 	}
 
-	// Save to database
 	$result = payu_save_currency_config_to_db( $sanitized_data );
 
 	if ( $result ) {
@@ -320,6 +509,11 @@ function payu_ajax_save_currency_config() {
 			'config_id' => $result,
 		) );
 	} else {
+		// Log database error securely
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'PayU Payment Links: Failed to save configuration to database' );
+		}
+
 		wp_send_json_error( array(
 			'message' => __( 'Failed to save configuration. Please try again.', 'payu-payment-links' ),
 		) );

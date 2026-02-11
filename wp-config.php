@@ -95,6 +95,10 @@ define( 'WP_DEBUG_DISPLAY', false );
 
 define('FS_METHOD', 'direct');
 
+if ( ! defined( 'PAYU_ENCRYPTION_KEY' ) ) {
+	define( 'PAYU_ENCRYPTION_KEY', 'f3b2e1c4d5a6978877665544332211aaff00bbccddeeff1122334455667788aa' );
+}
+
 /* That's all, stop editing! Happy publishing. */
 
 /** Absolute path to the WordPress directory. */

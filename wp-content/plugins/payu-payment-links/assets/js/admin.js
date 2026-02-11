@@ -59,6 +59,13 @@
 		}
 	};
 
+
+	jQuery(document).on('click', '.notice.is-dismissible', function (e) {
+		if (jQuery(e.target).hasClass('notice-dismiss') || jQuery(e.target).closest('.notice-dismiss').length) {
+			jQuery(this).fadeOut();
+		}
+	});
+
 	// Field-wise validation functions
 	// These functions mirror the server-side validation in payu-form-handler.php
 	
@@ -246,7 +253,6 @@
 				dataType: 'json',
 				timeout: 30000,
 				success: function(response) {
-					// Re-enable submit button
 					$submitButton.prop('disabled', false).text('Save Configuration');
 
 					if (response.success) {
@@ -255,6 +261,7 @@
 							.removeClass('notice-error')
 							.addClass('notice notice-success is-dismissible')
 							.html('<p>' + (response.data.message || 'Configuration saved successfully.') + '</p>')
+							.append('<button type="button" class="notice-dismiss"><span class="screen-reader-text">Dismiss this notice.</span></button>')
 							.fadeIn();
 
 						// Reset form and close it after 2 seconds
@@ -270,7 +277,6 @@
 								$('#payu-add-configuration-button').attr('aria-expanded', 'false');
 							});
 							
-							// Reload page to show updated configuration list
 							setTimeout(function() {
 								window.location.reload();
 							}, 1000);
@@ -316,6 +322,7 @@
 							.removeClass('notice-success')
 							.addClass('notice notice-error is-dismissible')
 							.html('<p>' + errorMessage + '</p>')
+							.append('<button type="button" class="notice-dismiss"><span class="screen-reader-text">Dismiss this notice.</span></button>')
 							.fadeIn();
 					}
 				},
@@ -366,6 +373,7 @@
 						.removeClass('notice-success')
 						.addClass('notice notice-error is-dismissible')
 						.html('<p>' + errorMessage + '</p>')
+						.append('<button type="button" class="notice-dismiss"><span class="screen-reader-text">Dismiss this notice.</span></button>')
 						.fadeIn();
 				}
 			});

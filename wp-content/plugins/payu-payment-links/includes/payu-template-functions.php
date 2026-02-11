@@ -19,7 +19,9 @@ function payu_render_configuration_form_template() {
 		<h3 id="payu-add-config-heading"><?php esc_html_e( 'Add New Currency Configuration', 'payu-payment-links' ); ?></h3>
 		
 		<!-- AJAX Messages Container -->
-		<div id="payu-ajax-messages" class="payu-ajax-messages" style="display: none;"></div>
+		<div id="payu-ajax-messages" class="payu-ajax-messages" style="display: none;">
+		</div>
+
 		
 		<form class="payu-config-form" method="post">
 			<!-- AJAX Data -->
@@ -42,7 +44,7 @@ function payu_render_configuration_form_template() {
 							</label>
 						</th>
 						<td class="forminp forminp-select">
-							<select name="payu_config_currency" id="payu_config_currency" class="select" aria-required="true">
+							<select name="payu_config_currency" id="payu_config_currency" class="select" required aria-required="true">
 								<option value=""><?php esc_html_e( 'Select...', 'payu-payment-links' ); ?></option>
 								<?php foreach ( $currencies as $currency_code => $currency_name ) : ?>
 									<option value="<?php echo esc_attr( $currency_code ); ?>">
@@ -64,7 +66,7 @@ function payu_render_configuration_form_template() {
 							</label>
 						</th>
 						<td class="forminp forminp-text">
-							<input type="text" name="payu_config_merchant_id" id="payu_config_merchant_id" class="regular-text" value="" aria-required="true">
+							<input type="text" name="payu_config_merchant_id" id="payu_config_merchant_id" class="regular-text" value="" required aria-required="true" maxlength="100">
 							<span id="payu_config_merchant_id_error" class="payu-field-error-container"></span>
 						</td>
 					</tr>
@@ -79,7 +81,7 @@ function payu_render_configuration_form_template() {
 							</label>
 						</th>
 						<td class="forminp forminp-text">
-							<input type="text" name="payu_config_client_id" id="payu_config_client_id" class="regular-text" value="" aria-required="true">
+							<input type="text" name="payu_config_client_id" id="payu_config_client_id" class="regular-text" value="" required aria-required="true" maxlength="255">
 							<span id="payu_config_client_id_error" class="payu-field-error-container"></span>
 						</td>
 					</tr>
@@ -94,7 +96,7 @@ function payu_render_configuration_form_template() {
 							</label>
 						</th>
 						<td class="forminp forminp-password">
-							<input type="password" name="payu_config_client_secret" id="payu_config_client_secret" class="regular-text" value="" aria-required="true" autocomplete="new-password">
+							<input type="password" name="payu_config_client_secret" id="payu_config_client_secret" class="regular-text" value="" required aria-required="true" autocomplete="new-password">
 							<span id="payu_config_client_secret_error" class="payu-field-error-container"></span>
 						</td>
 					</tr>
