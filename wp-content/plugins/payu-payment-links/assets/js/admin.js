@@ -159,6 +159,519 @@
 		return true;
 	}
 
+	// AJAX Filtering for Configuration List
+	var PayUConfigFilter = {
+		init: function() {
+			this.bindEvents();
+		},
+
+		bindEvents: function() {
+			var self = this;
+
+			// Search button click - AJAX on click
+			$(document).on('click', '.payu-config-list .search-box #search-submit', function(e) {
+				e.preventDefault();
+				var searchTerm = $('.payu-config-list .search-box input[name="s"]').val() || '';
+				
+				// Get current filters
+				var environmentFilter = $('#payu-filter-by-environment').val() || '';
+				
+				self.filterConfigs({
+					s: searchTerm,
+					environment_filter: environmentFilter,
+					paged: 1 // Reset to first page when searching
+				});
+			});
+
+			// Search input - AJAX on Enter key
+			$(document).on('keypress', '.payu-config-list .search-box input[name="s"]', function(e) {
+				if (e.which === 13) { // Enter key
+					e.preventDefault();
+					var searchTerm = $(this).val() || '';
+					var environmentFilter = $('#payu-filter-by-environment').val() || '';
+					
+					self.filterConfigs({
+						s: searchTerm,
+						environment_filter: environmentFilter,
+						paged: 1
+					});
+				}
+			});
+
+			// Environment dropdown filter - AJAX on change
+			$(document).on('change', '#payu-filter-by-environment', function(e) {
+				e.preventDefault();
+				var environment = $(this).val();
+				
+				// Preserve search term
+				var searchTerm = $('.payu-config-list .search-box input[name="s"]').val() || '';
+				
+				self.filterConfigs({
+					s: searchTerm,
+					environment_filter: environment,
+					paged: 1 // Reset to first page when filter changes
+				});
+			});
+
+			// Pagination links - AJAX on click (handle all pagination links)
+			$(document).on('click', '.payu-config-list .tablenav-pages a, .payu-config-list .pagination-links a', function(e) {
+				e.preventDefault();
+				var $link = $(this);
+				
+				// Skip if disabled
+				if ($link.hasClass('disabled') || $link.closest('.disabled').length) {
+					return false;
+				}
+				
+				var href = $link.attr('href') || '';
+				
+				// Preserve current filters
+				var searchTerm = $('.payu-config-list .search-box input[name="s"]').val() || '';
+				var environmentFilter = $('#payu-filter-by-environment').val() || '';
+				
+				// Get current page and total pages
+				var currentPage = parseInt($('.payu-config-list .current-page').val() || '1', 5);
+				var totalPages = parseInt($('.payu-config-list .total-pages').text() || '1', 5);
+				
+				// Extract paged from URL or determine from button class
+				var paged = 1;
+				
+				// First try to extract from href URL
+				if (href && href.indexOf('paged=') !== -1) {
+					var match = href.match(/paged=(\d+)/);
+					if (match && match[1]) {
+						paged = parseInt(match[1], 10);
+					}
+				}
+				// If no paged in URL, check button classes
+				else if ($link.hasClass('first-page')) {
+					paged = 1;
+				} else if ($link.hasClass('prev-page')) {
+					paged = Math.max(1, currentPage - 1);
+				} else if ($link.hasClass('next-page')) {
+					paged = Math.min(totalPages, currentPage + 1);
+				} else if ($link.hasClass('last-page')) {
+					paged = totalPages;
+				}
+				// If still no paged determined, try to extract from link text (page numbers)
+				else {
+					var linkText = $link.text().trim();
+					var pageNum = parseInt(linkText, 10);
+					if (!isNaN(pageNum) && pageNum > 0) {
+						paged = pageNum;
+					}
+				}
+
+				// Debug logging
+				if (typeof console !== 'undefined' && console.log) {
+					console.log('Pagination click:', {
+						href: href,
+						classes: $link.attr('class'),
+						currentPage: currentPage,
+						totalPages: totalPages,
+						calculatedPaged: paged
+					});
+				}
+
+				self.filterConfigs({
+					s: searchTerm,
+					environment_filter: environmentFilter,
+					paged: paged
+				});
+			});
+
+			// Handle pagination input field (direct page number entry)
+			$(document).on('keypress', '.payu-config-list .current-page', function(e) {
+				if (e.which === 13) { // Enter key
+					e.preventDefault();
+					var $input = $(this);
+					var paged = parseInt($input.val() || '1', 5);
+					var totalPages = parseInt($('.payu-config-list .total-pages').text() || '1', 5);
+					
+					if (paged < 1) paged = 1;
+					if (paged > totalPages) paged = totalPages;
+					
+					var searchTerm = $('.payu-config-list .search-box input[name="s"]').val() || '';
+					var environmentFilter = $('#payu-filter-by-environment').val() || '';
+					self.filterConfigs({
+						s: searchTerm,
+						environment_filter: environmentFilter,
+						paged: paged
+					});
+				}
+			});
+
+			// Sortable column headers - AJAX on click
+			$(document).on('click', '.payu-config-list .wp-list-table th.sortable a, .payu-config-list .wp-list-table th.sorted a', function(e) {
+				e.preventDefault();
+				var $link = $(this);
+				var $th = $link.closest('th');
+				var href = $link.attr('href');
+				
+				// Extract orderby from URL
+				var clickedOrderby = '';
+				if (href && href.indexOf('orderby=') !== -1) {
+					var match = href.match(/orderby=([^&]*)/);
+					if (match && match[1]) {
+						clickedOrderby = decodeURIComponent(match[1]);
+					}
+				}
+				
+				// If no orderby in URL, try to get from column class
+				if (!clickedOrderby) {
+					var columnClass = $th.attr('class') || '';
+					if (columnClass.indexOf('column-') !== -1) {
+						var match = columnClass.match(/column-([^\s]+)/);
+						if (match && match[1]) {
+							clickedOrderby = match[1];
+						}
+					}
+				}
+				
+				// Get current sort state from URL parameters
+				var urlParams = new URLSearchParams(window.location.search);
+				var currentOrderby = urlParams.get('orderby') || '';
+				var currentOrder = (urlParams.get('order') || 'ASC').toUpperCase();
+				
+				// If no URL params, check table header for current sort state
+				if (!currentOrderby && $th.hasClass('sorted')) {
+					// Check sorting indicator to determine current order
+					var $sortIndicator = $th.find('.sorting-indicator');
+					if ($sortIndicator.length) {
+						var indicatorClass = $sortIndicator.attr('class') || '';
+						if (indicatorClass.indexOf('asc') !== -1) {
+							currentOrder = 'ASC';
+						} else if (indicatorClass.indexOf('desc') !== -1) {
+							currentOrder = 'DESC';
+						}
+					}
+					currentOrderby = clickedOrderby; // Assume current column is sorted
+				}
+				
+				// Determine new order: toggle if same column, default to ASC if different column
+				var newOrder = 'ASC';
+				if (clickedOrderby && currentOrderby === clickedOrderby) {
+					// Same column clicked - toggle order
+					newOrder = (currentOrder === 'ASC') ? 'DESC' : 'ASC';
+				} else {
+					// Different column clicked - default to ASC
+					newOrder = 'ASC';
+				}
+
+				// Preserve current filters
+				var searchTerm = $('.payu-config-list .search-box input[name="s"]').val() || '';
+				var environmentFilter = $('#payu-filter-by-environment').val() || '';
+				var paged = 1;
+				
+				// Get page from URL params first (most accurate)
+				if (urlParams.has('paged')) {
+					paged = parseInt(urlParams.get('paged'), 5) || 1;
+				} else if (href && href.indexOf('paged=') !== -1) {
+					var match = href.match(/paged=(\d+)/);
+					if (match && match[1]) {
+						paged = parseInt(match[1], 5);
+					}
+				}
+
+				self.filterConfigs({
+					environment_filter: environmentFilter,
+					paged: paged,
+					orderby: clickedOrderby,
+					order: newOrder
+				});
+			});
+		},
+
+		filterConfigs: function(filters) {
+			var $wrapper = $('#payu-config-list-wrapper');
+			var $container = $('#payu-config-list-container');
+			
+			// Show loading state
+			$wrapper.addClass('payu-loading');
+			$container.append('<div class="payu-loading-overlay"><span class="spinner is-active"></span></div>');
+
+			// Validate AJAX data before sending
+			if (typeof payuAjaxData === 'undefined' || !payuAjaxData.filterNonce) {
+				console.error('PayU AJAX Data not loaded. Please refresh the page.');
+				alert('Configuration error. Please refresh the page.');
+				$wrapper.removeClass('payu-loading');
+				$container.find('.payu-loading-overlay').remove();
+				return;
+			}
+
+			// Prepare AJAX data
+			var ajaxData = {
+				action: 'payu_filter_configs',
+				nonce: payuAjaxData.filterNonce,
+				s: filters.s || '', // Search term
+				environment_filter: filters.environment_filter || '',
+				paged: filters.paged || 1,
+				orderby: filters.orderby || '',
+				order: filters.order || ''
+			};
+
+			// Debug: Log AJAX request
+			if (typeof console !== 'undefined' && console.log) {
+				console.log('PayU Filter AJAX Request:', ajaxData);
+			}
+
+			$.ajax({
+				url: typeof payuAjaxData !== 'undefined' ? payuAjaxData.ajaxUrl : ajaxurl,
+				type: 'POST',
+				data: ajaxData,
+				dataType: 'json',
+				timeout: 30000,
+				beforeSend: function(xhr) {
+					// Set proper headers
+					xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+				},
+				success: function(response) {
+					// Debug: Log response
+					if (typeof console !== 'undefined' && console.log) {
+						console.log('PayU Filter AJAX Response:', response);
+					}
+					$wrapper.removeClass('payu-loading');
+					$container.find('.payu-loading-overlay').remove();
+
+					if (response.success && response.data && response.data.html) {
+						// Store current filter values before replacing HTML
+						var currentEnvironmentFilter = ajaxData.environment_filter || '';
+						var currentSearchTerm = ajaxData.s || '';
+						
+						// Replace table content
+						$wrapper.html(response.data.html);
+						
+						// Restore filter dropdown value after AJAX reload
+						if (currentEnvironmentFilter) {
+							$('#payu-filter-by-environment').val(currentEnvironmentFilter);
+						}
+						
+						// Restore search input value after AJAX reload
+						if (currentSearchTerm) {
+							$('.payu-config-list .search-box input[name="s"]').val(currentSearchTerm);
+						}
+						
+						// Note: Status toggle handlers work automatically via event delegation
+						// No need to re-initialize after AJAX refresh
+						
+						// Update URL without page refresh
+						var url = new URL(window.location.href);
+						if (ajaxData.s) {
+							url.searchParams.set('s', ajaxData.s);
+						} else {
+							url.searchParams.delete('s');
+						}
+						if (ajaxData.environment_filter) {
+							url.searchParams.set('environment_filter', ajaxData.environment_filter);
+						} else {
+							url.searchParams.delete('environment_filter');
+						}
+						if (ajaxData.paged && ajaxData.paged > 1) {
+							url.searchParams.set('paged', ajaxData.paged);
+						} else {
+							url.searchParams.delete('paged');
+						}
+						if (ajaxData.orderby) {
+							url.searchParams.set('orderby', ajaxData.orderby);
+							url.searchParams.set('order', ajaxData.order || 'ASC');
+						} else {
+							url.searchParams.delete('orderby');
+							url.searchParams.delete('order');
+						}
+						window.history.pushState({}, '', url.toString());
+					} else {
+						console.error('Filter request failed:', response);
+						alert('Failed to load configurations. Please refresh the page.');
+					}
+				},
+				error: function(xhr, status, error) {
+					$wrapper.removeClass('payu-loading');
+					$container.find('.payu-loading-overlay').remove();
+					
+					// Enhanced error logging
+					console.error('PayU Filter AJAX Error:', {
+						status: status,
+						error: error,
+						statusCode: xhr.status,
+						statusText: xhr.statusText,
+						responseText: xhr.responseText,
+						requestData: ajaxData
+					});
+
+					// Show user-friendly error message
+					var errorMessage = 'An error occurred while filtering configurations. ';
+					if (xhr.status === 400) {
+						errorMessage += 'Bad Request - Please check the browser console for details.';
+					} else if (xhr.status === 403) {
+						errorMessage += 'Permission denied. Please refresh the page.';
+					} else if (xhr.status === 500) {
+						errorMessage += 'Server error. Please try again later.';
+					} else if (status === 'timeout') {
+						errorMessage += 'Request timed out. Please try again.';
+					} else {
+						errorMessage += 'Please refresh the page and try again.';
+					}
+
+					// Try to parse error response
+					try {
+						var errorResponse = JSON.parse(xhr.responseText);
+						if (errorResponse.data && errorResponse.data.message) {
+							errorMessage = errorResponse.data.message;
+						}
+					} catch (e) {
+						// Use default error message
+					}
+
+					alert(errorMessage);
+				}
+			});
+		}
+	};
+
+	// Status Toggle Handler
+	var PayUStatusToggle = {
+		initialized: false,
+
+		init: function() {
+			// Only bind events once (event delegation handles dynamic content)
+			if (!this.initialized) {
+				this.bindEvents();
+				this.initialized = true;
+			}
+		},
+
+		bindEvents: function() {
+			var self = this;
+
+			// Handle toggle switch clicks using event delegation
+			// This works for dynamically loaded content (AJAX table refreshes)
+			$(document).off('change', '.payu-status-toggle-input').on('change', '.payu-status-toggle-input', function(e) {
+				e.preventDefault();
+				var $toggle = $(this);
+				var $label = $toggle.closest('.payu-status-toggle');
+				var configId = $label.data('config-id');
+				var currency = $label.data('currency');
+				var isChecked = $toggle.is(':checked');
+				var newStatus = isChecked ? 'active' : 'inactive';
+
+				// Validate required data
+				if (!configId || !currency) {
+					console.error('PayU Toggle: Missing config ID or currency');
+					$toggle.prop('checked', !isChecked); // Revert toggle
+					return;
+				}
+
+				// Disable toggle during AJAX request
+				$toggle.prop('disabled', true);
+				$label.addClass('payu-status-toggle-loading');
+
+				self.toggleStatus(configId, currency, newStatus, $toggle, $label);
+			});
+		},
+
+		toggleStatus: function(configId, currency, newStatus, $toggle, $label) {
+			var self = this;
+
+			// Validate AJAX data
+			if (typeof payuAjaxData === 'undefined' || !payuAjaxData.toggleNonce) {
+				console.error('PayU AJAX Data not loaded. Please refresh the page.');
+				alert('Configuration error. Please refresh the page.');
+				$toggle.prop('disabled', false);
+				$label.removeClass('payu-status-toggle-loading');
+				// Revert toggle state
+				$toggle.prop('checked', !$toggle.prop('checked'));
+				return;
+			}
+
+			// Prepare AJAX data
+			var ajaxData = {
+				action: 'payu_toggle_status',
+				nonce: payuAjaxData.toggleNonce,
+				config_id: configId,
+				currency: currency,
+				status: newStatus
+			};
+
+			$.ajax({
+				url: typeof payuAjaxData !== 'undefined' ? payuAjaxData.ajaxUrl : ajaxurl,
+				type: 'POST',
+				data: ajaxData,
+				dataType: 'json',
+				timeout: 10000, // Reduced timeout for faster feedback
+				cache: false, // Ensure fresh request
+				success: function(response) {
+					$toggle.prop('disabled', false);
+					$label.removeClass('payu-status-toggle-loading');
+
+					if (response.success) {
+						// Update toggle state based on response
+						if (response.data && response.data.status !== undefined) {
+							var isActive = response.data.status === 'active';
+							$toggle.prop('checked', isActive);
+							
+							if (isActive) {
+								$label.addClass('payu-status-toggle-active');
+							} else {
+								$label.removeClass('payu-status-toggle-active');
+							}
+						}
+					} else {
+						// Revert toggle state on error (especially if prevented)
+						var shouldRevert = true;
+						if (response.data && response.data.prevent_update === true) {
+							// This is a prevention case - definitely revert
+							shouldRevert = true;
+						}
+						
+						if (shouldRevert) {
+							$toggle.prop('checked', !$toggle.prop('checked'));
+							if ($toggle.prop('checked')) {
+								$label.addClass('payu-status-toggle-active');
+							} else {
+								$label.removeClass('payu-status-toggle-active');
+							}
+						}
+
+						var errorMessage = response.data && response.data.message 
+							? response.data.message 
+							: 'Failed to update status. Please try again.';
+						
+						// Show alert with the error message
+						alert(errorMessage);
+					}
+				},
+				error: function(xhr, status, error) {
+					$toggle.prop('disabled', false);
+					$label.removeClass('payu-status-toggle-loading');
+					
+					// Revert toggle state on error
+					$toggle.prop('checked', !$toggle.prop('checked'));
+					if ($toggle.prop('checked')) {
+						$label.addClass('payu-status-toggle-active');
+					} else {
+						$label.removeClass('payu-status-toggle-active');
+					}
+
+					var errorMessage = 'Network error occurred. Please check your connection and try again.';
+					if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+						errorMessage = xhr.responseJSON.data.message;
+					} else if (status === 'timeout') {
+						errorMessage = 'Request timed out. Please try again.';
+					}
+
+					console.error('PayU Toggle Status AJAX Error:', {
+						status: status,
+						error: error,
+						statusCode: xhr.status,
+						responseText: xhr.responseText
+					});
+
+					alert(errorMessage);
+				}
+			});
+		}
+	};
+
 	// Simple form validation
 	$(document).ready(function() {
 		// Initialize form toggle
@@ -169,6 +682,14 @@
 				'payu-cancel-configuration'
 			);
 		}
+
+		// Initialize AJAX filtering
+		if ($('#payu-config-list-container').length) {
+			PayUConfigFilter.init();
+		}
+
+		// Initialize status toggle (always initialize - uses event delegation)
+		PayUStatusToggle.init();
 
 		// Field-wise validation on blur/change
 		$('#payu_config_currency').on('change', function() {

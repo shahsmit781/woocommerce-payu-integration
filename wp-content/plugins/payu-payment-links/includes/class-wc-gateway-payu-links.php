@@ -113,6 +113,18 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 				$version,
 				true
 			);
+
+			// Localize script with AJAX data
+			wp_localize_script(
+				'payu-payment-links-admin',
+				'payuAjaxData',
+				array(
+					'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
+					'nonce'       => wp_create_nonce( 'payu_save_currency_config' ),
+					'filterNonce' => wp_create_nonce( 'payu_filter_configs' ),
+					'toggleNonce' => wp_create_nonce( 'payu_toggle_status' ),
+				)
+			);
 		}
 	}
 
@@ -127,70 +139,38 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Get all currency configurations from database (non-deleted only)
-	 *
-	 * @return array Array of configuration objects
-	 */
-	private function get_currency_configs() {
-		global $wpdb;
-		$table_name = $wpdb->prefix . 'payu_currency_configs';
-		
-		// Check if table exists
-		$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
-		
-		if ( ! $table_exists ) {
-			return array();
-		}
-		
-		$results = $wpdb->get_results(
-			"SELECT * FROM {$table_name} WHERE deleted_at IS NULL ORDER BY currency ASC, environment ASC",
-			OBJECT
-		);
-		
-		return $results ? $results : array();
-	}
-
-	/**
-	 * Render the configuration list table
-	 * Template function for configuration listing HTML.
+	 * Render the configuration list table using WP_List_Table
+	 * Template function for configuration listing HTML with pagination, search, and filtering.
 	 *
 	 * @return void
 	 */
 	private function render_configuration_list() {
-		$configs = $this->get_currency_configs();
-		
-		if ( empty( $configs ) ) {
-			return;
-		}
+		// Load the list table class
+		require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-config-list-table.php';
+
+		// Create an instance of our custom list table
+		$list_table = new PayU_Config_List_Table();
+
+		// Prepare items (this handles pagination, search, filtering)
+		$list_table->prepare_items();
+
 		?>
-		<div class="payu-config-list">
-			<h3><?php esc_html_e( 'Currency Configurations', 'payu-payment-links' ); ?></h3>
-			<table class="wp-list-table widefat fixed striped">
-				<thead>
-					<tr>
-						<th><?php esc_html_e( 'Currency', 'payu-payment-links' ); ?></th>
-						<th><?php esc_html_e( 'Merchant ID', 'payu-payment-links' ); ?></th>
-						<th><?php esc_html_e( 'Client ID', 'payu-payment-links' ); ?></th>
-						<th><?php esc_html_e( 'Environment', 'payu-payment-links' ); ?></th>
-						<th><?php esc_html_e( 'Status', 'payu-payment-links' ); ?></th>
-					</tr>
-				</thead>
-				<tbody>
-					<?php foreach ( $configs as $config ) : ?>
-						<tr>
-							<td><strong><?php echo esc_html( $config->currency ); ?></strong></td>
-							<td><?php echo esc_html( $config->merchant_id ); ?></td>
-							<td><?php echo esc_html( $config->client_id ); ?></td>
-							<td><?php echo esc_html( strtoupper( $config->environment ) ); ?></td>
-							<td>
-								<span class="status-<?php echo esc_attr( $config->status ); ?>">
-									<?php echo esc_html( ucfirst( $config->status ) ); ?>
-								</span>
-							</td>
-						</tr>
-					<?php endforeach; ?>
-				</tbody>
-			</table>
+		<div class="payu-config-list" id="payu-config-list-container">
+			<div class="payu-config-list-header">
+				<h3 class="payu-config-list-title"><?php esc_html_e( 'Currency Configurations', 'payu-payment-links' ); ?></h3>
+				<div class="payu-config-list-actions">
+					<button type="button" id="payu-add-configuration-button" class="button button-primary">
+						<?php esc_html_e( 'Add Configuration', 'payu-payment-links' ); ?>
+					</button>
+				</div>
+			</div>
+			
+			<div id="payu-config-list-wrapper">
+				<?php
+				// Display the table (display() automatically calls search_box and extra_tablenav internally)
+				$list_table->display();
+				?>
+			</div>
 		</div>
 		<?php
 	}

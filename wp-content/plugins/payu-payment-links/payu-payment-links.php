@@ -250,11 +250,32 @@ function payu_payment_links_load_gateway() {
 	// Load template functions
 	require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payu-template-functions.php';
 
-	// Load form handler
+	// Load form handler (must be loaded before registering AJAX hooks)
 	require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payu-form-handler.php';
 
 	// Register AJAX handler for AJAX form submission
 	add_action( 'wp_ajax_payu_save_currency_config', 'payu_ajax_save_currency_config' );
+
+	// Register AJAX handler for filtering configurations
+	// Note: Function must be defined before this hook (loaded via require_once above)
+	if ( function_exists( 'payu_ajax_filter_configs' ) ) {
+		add_action( 'wp_ajax_payu_filter_configs', 'payu_ajax_filter_configs' );
+	} else {
+		// Log error if function not found
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'PayU Payment Links: payu_ajax_filter_configs function not found!' );
+		}
+	}
+
+	// Register AJAX handler for toggling configuration status
+	if ( function_exists( 'payu_ajax_toggle_status' ) ) {
+		add_action( 'wp_ajax_payu_toggle_status', 'payu_ajax_toggle_status' );
+	} else {
+		// Log error if function not found
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'PayU Payment Links: payu_ajax_toggle_status function not found!' );
+		}
+	}
 
 	// Load the payment gateway class file
 	$gateway_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-wc-gateway-payu-links.php';

@@ -24,8 +24,8 @@ if ( ! defined( 'PAYU_MERCHANT_ID' ) ) define( 'PAYU_MERCHANT_ID', '9121334' );
 if ( ! defined( 'PAYU_TOKEN_URL' ) ) define( 'PAYU_TOKEN_URL', 'https://uat-accounts.payu.in/oauth/token' );
 if ( ! defined( 'PAYU_PAYMENTLINKS_URL' ) ) define( 'PAYU_PAYMENTLINKS_URL', 'https://uatoneapi.payu.in/payment-links' );
 
-if( ! defined( 'PAYU_RETURN_URL' ) ) define( 'PAYU_RETURN_URL', 'https://gerald-unwelded-griffin.ngrok-free.dev/wordpress-6.9/index.php/payu-success/' );
-if( ! defined( 'PAYU_FAILURE_URL' ) ) define( 'PAYU_FAILURE_URL', 'https://gerald-unwelded-griffin.ngrok-free.dev/wordpress-6.9/index.php/payu-failed/' );
+if( ! defined( 'PAYU_RETURN_URL' ) ) define( 'PAYU_RETURN_URL', 'https://gerald-unwelded-griffin.ngrok-free.dev/woocommerce-payu-integration//index.php/payu-success/' );
+if( ! defined( 'PAYU_FAILURE_URL' ) ) define( 'PAYU_FAILURE_URL', 'https://gerald-unwelded-griffin.ngrok-free.dev/woocommerce-payu-integration//index.php/payu-failed/' );
 
 /* -------------------------
    Helpers

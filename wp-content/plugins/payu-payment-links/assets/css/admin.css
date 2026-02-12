@@ -217,31 +217,120 @@
 .payu-config-list {
 	margin: 20px 0;
 	padding: 0;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
 	text-align: left;
 }
 
-.payu-config-list h3 {
-	margin: 0 0 15px 0;
+/* Header with title and Add button */
+.payu-config-list-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 15px 20px;
+	border-bottom: 1px solid #c3c4c7;
+	background: #f6f7f7;
+}
+
+.payu-config-list-title {
+	margin: 0;
 	padding: 0;
 	font-size: 14px;
 	font-weight: 600;
-	text-align: left;
+	color: #1d2327;
+	flex: 1;
 }
 
-.payu-config-list table {
+.payu-config-list-actions {
+	margin-left: 20px;
+}
+
+.payu-config-list-actions .button {
+	margin: 0;
+}
+
+/* Table header with filter dropdown and search box in same row */
+.payu-table-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 15px 20px;
+	border-bottom: 1px solid #c3c4c7;
+	background: #fff;
+	overflow: hidden;
+}
+
+.payu-table-header-left {
+	flex: 0 0 auto;
+	margin: 0;
+	padding: 0;
+}
+
+.payu-table-header-left .alignleft.actions {
+	margin: 0;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.payu-table-header-left .alignleft.actions select {
+	margin: 0;
+	min-width: 150px;
+}
+
+.payu-table-header-right {
+	flex: 0 0 auto;
+	margin: 0;
+	padding: 0;
+}
+
+.payu-table-header-right .search-box {
+	margin: 0;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.payu-table-header-right .search-box label {
+	margin: 0;
+	padding: 0;
+	display: inline-block;
+	vertical-align: middle;
+}
+
+.payu-table-header-right .search-box input[type="search"] {
+	width: 200px;
+	margin: 0;
+	vertical-align: middle;
+}
+
+.payu-table-header-right .search-box #search-submit {
+	margin: 0;
+	vertical-align: middle;
+}
+
+/* WP_List_Table Styles */
+.payu-config-list .wp-list-table {
 	width: 100%;
 	border-collapse: collapse;
 	text-align: left;
+	margin-top: 0;
 }
 
-.payu-config-list table th {
+.payu-config-list .wp-list-table th {
 	text-align: left;
 	padding: 10px;
+	font-weight: 600;
 }
 
-.payu-config-list table td {
+.payu-config-list .wp-list-table td {
 	text-align: left;
 	padding: 10px;
+	vertical-align: middle;
 }
 
 .payu-config-list .status-active {
@@ -258,6 +347,299 @@
 	color: #f56e28;
 	font-weight: 600;
 }
+
+/* Status Toggle Switch Styles - Rounded Switch */
+.payu-status-toggle {
+	position: relative;
+	display: inline-block;
+	width: 50px;
+	height: 28px;
+	cursor: pointer;
+	vertical-align: middle;
+}
+
+.payu-status-toggle-input {
+	opacity: 0;
+	width: 0;
+	height: 0;
+	position: absolute;
+	margin: 0;
+	padding: 0;
+}
+
+.payu-status-toggle-slider {
+	position: absolute;
+	cursor: pointer;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: #c3c4c7;
+	transition: all 0.3s ease;
+	border-radius: 28px;
+	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.payu-status-toggle-slider:before {
+	position: absolute;
+	content: "";
+	height: 22px;
+	width: 22px;
+	left: 3px;
+	bottom: 3px;
+	background-color: white;
+	transition: all 0.3s ease;
+	border-radius: 50%;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.payu-status-toggle-input:checked + .payu-status-toggle-slider {
+	background-color: #46b450;
+	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.payu-status-toggle-input:checked + .payu-status-toggle-slider:before {
+	transform: translateX(22px);
+	box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.payu-status-toggle-input:focus + .payu-status-toggle-slider {
+	outline: 2px solid #2271b1;
+	outline-offset: 2px;
+}
+
+.payu-status-toggle-input:disabled + .payu-status-toggle-slider {
+	opacity: 0.6;
+	cursor: not-allowed;
+	background-color: #dcdcde;
+}
+
+.payu-status-toggle-input:disabled:checked + .payu-status-toggle-slider {
+	background-color: #8c8f94;
+}
+
+.payu-status-toggle.payu-status-toggle-loading .payu-status-toggle-slider {
+	opacity: 0.7;
+	cursor: wait;
+}
+
+.payu-status-toggle.payu-status-toggle-loading .payu-status-toggle-slider:before {
+	animation: payu-toggle-pulse 1.5s ease-in-out infinite;
+}
+
+.payu-status-toggle:hover:not(.payu-status-toggle-loading) .payu-status-toggle-slider {
+	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15), 0 0 0 2px rgba(34, 113, 177, 0.1);
+}
+
+.payu-status-toggle:hover:not(.payu-status-toggle-loading) .payu-status-toggle-input:checked + .payu-status-toggle-slider {
+	background-color: #3fa048;
+}
+
+@keyframes payu-toggle-pulse {
+	0%, 100% {
+		opacity: 1;
+		transform: translateX(22px) scale(1);
+	}
+	50% {
+		opacity: 0.7;
+		transform: translateX(22px) scale(0.95);
+	}
+}
+
+/* AJAX Loading State */
+.payu-config-list #payu-config-list-wrapper {
+	transition: opacity 0.2s ease;
+	clear: both;
+}
+
+.payu-config-list #payu-config-list-wrapper[style*="opacity: 0.5"] {
+	cursor: wait;
+}
+
+/* Ensure proper spacing */
+.payu-config-list #payu-config-list-wrapper .payu-table-header {
+	margin-bottom: 0;
+}
+
+.payu-config-list #payu-config-list-wrapper .tablenav.top {
+	margin-top: 0;
+}
+
+.payu-config-list #payu-config-list-wrapper .wp-list-table {
+	margin-top: 0;
+	clear: both;
+}
+
+/* Views (Status Filter) Styles - Removed as status filter tabs are not needed */
+
+/* Extra Tablenav (Environment Filter) Styles */
+.payu-config-list .tablenav {
+	height: auto;
+	margin: 0;
+	padding: 10px 20px;
+	background: #fff;
+	border-bottom: 1px solid #c3c4c7;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	overflow: visible;
+	clear: both;
+}
+
+.payu-config-list .tablenav.top {
+	margin-bottom: 0;
+	border-top: none;
+	display: none; /* Hide top tablenav as we're using custom header */
+}
+
+.payu-config-list .tablenav.bottom {
+	margin-top: 0;
+	border-top: 1px solid #c3c4c7;
+	border-bottom: none;
+	display: flex;
+	justify-content: flex-end; /* Align pagination to the right */
+	align-items: center;
+}
+
+.payu-config-list .tablenav .alignleft.actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	float: left;
+	margin: 0;
+	padding: 0;
+}
+
+.payu-config-list .tablenav .alignleft.actions select {
+	margin-right: 5px;
+	min-width: 150px;
+}
+
+/* Prevent duplicate filter display */
+.payu-config-list .tablenav.top {
+	display: flex;
+	justify-content: space-between;
+}
+
+.payu-config-list .tablenav.top + .tablenav.top {
+	display: none; /* Hide if duplicate exists */
+}
+
+.payu-config-list .tablenav .alignleft.actions .button {
+	margin: 0;
+}
+
+/* Clear floats */
+.payu-config-list .tablenav::after {
+	content: "";
+	display: table;
+	clear: both;
+}
+
+/* Pagination Styles */
+.payu-config-list .tablenav-pages {
+	float: right;
+	margin: 0;
+	padding: 0;
+	font-size: 12px;
+	clear: none;
+	text-align: right;
+}
+
+/* Pagination alignment - already handled in .tablenav.bottom above */
+
+.payu-config-list .tablenav-pages .displaying-num {
+	margin-right: 10px;
+	color: #646970;
+}
+
+.payu-config-list .tablenav-pages .pagination-links {
+	display: inline-block;
+}
+
+.payu-config-list .tablenav-pages .pagination-links a,
+.payu-config-list .tablenav-pages .pagination-links span {
+	display: inline-block;
+	padding: 4px 8px;
+	margin: 0 2px;
+	text-decoration: none;
+	border: 1px solid #c3c4c7;
+	background: #fff;
+	color: #2271b1;
+}
+
+.payu-config-list .tablenav-pages .pagination-links a:hover {
+	background: #f0f0f1;
+	border-color: #8c8f94;
+}
+
+.payu-config-list .tablenav-pages .pagination-links .current-page {
+	background: #2271b1;
+	border-color: #2271b1;
+	color: #fff;
+	font-weight: 600;
+}
+
+.payu-config-list .tablenav-pages .pagination-links .disabled {
+	color: #a7aaad;
+	cursor: default;
+	pointer-events: none;
+}
+
+/* Sortable Column Styles */
+.payu-config-list .wp-list-table .sortable a,
+.payu-config-list .wp-list-table .sorted a {
+	color: #2271b1;
+	text-decoration: none;
+}
+
+.payu-config-list .wp-list-table .sortable a:hover,
+.payu-config-list .wp-list-table .sorted a:hover {
+	color: #135e96;
+}
+
+.payu-config-list .wp-list-table .sorted .sorting-indicator {
+	visibility: visible;
+}
+
+.payu-config-list .wp-list-table .sortable .sorting-indicator {
+	visibility: hidden;
+}
+
+.payu-config-list .wp-list-table th:hover .sorting-indicator {
+	visibility: visible;
+}
+
+/* AJAX Loading State */
+.payu-config-list.payu-loading {
+	position: relative;
+	opacity: 0.6;
+	pointer-events: none;
+}
+
+.payu-loading-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(255, 255, 255, 0.8);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1000;
+}
+
+.payu-loading-overlay .spinner {
+	float: none;
+	margin: 0;
+}
+
+/* AJAX Filter Styles */
+.payu-config-list .payu-ajax-filter {
+	margin-right: 5px;
+}
+
 
 @media screen and (max-width: 782px) {
 	.payu-add-configuration-form .form-table th,

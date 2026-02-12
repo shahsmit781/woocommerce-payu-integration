@@ -24,13 +24,8 @@ function payu_render_configuration_form_template() {
 
 		
 		<form class="payu-config-form" method="post">
-			<!-- AJAX Data -->
-			<script type="text/javascript">
-				var payuAjaxData = {
-					ajaxUrl: '<?php echo esc_js( admin_url( 'admin-ajax.php' ) ); ?>',
-					nonce: '<?php echo esc_js( wp_create_nonce( 'payu_save_currency_config' ) ); ?>'
-				};
-			</script>
+			<!-- AJAX Data is set via wp_localize_script in gateway class -->
+			<!-- No need for inline script - wp_localize_script handles it -->
 			
 			<table class="form-table" role="presentation">
 				<tbody>

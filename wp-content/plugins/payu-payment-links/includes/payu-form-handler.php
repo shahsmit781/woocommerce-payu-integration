@@ -519,3 +519,223 @@ function payu_ajax_save_currency_config() {
 		) );
 	}
 }
+
+/**
+ * AJAX handler for filtering configurations list
+ * Returns filtered table HTML via AJAX without page refresh
+ *
+ * @return void
+ */
+function payu_ajax_filter_configs() {
+	// Debug: Log request for troubleshooting
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		error_log( 'PayU Filter AJAX Request: ' . print_r( $_POST, true ) );
+	}
+
+	// Check if action parameter exists
+	if ( ! isset( $_POST['action'] ) || 'payu_filter_configs' !== $_POST['action'] ) {
+		wp_send_json_error( array(
+			'message' => __( 'Invalid action parameter.', 'payu-payment-links' ),
+			'debug'   => defined( 'WP_DEBUG' ) && WP_DEBUG ? array( 'received_action' => isset( $_POST['action'] ) ? $_POST['action'] : 'missing' ) : null,
+		) );
+		return;
+	}
+
+	// Check nonce
+	if ( ! isset( $_POST['nonce'] ) ) {
+		wp_send_json_error( array(
+			'message' => __( 'Security nonce is missing.', 'payu-payment-links' ),
+		) );
+		return;
+	}
+
+	$nonce = sanitize_text_field( wp_unslash( $_POST['nonce'] ) );
+	if ( ! wp_verify_nonce( $nonce, 'payu_filter_configs' ) ) {
+		wp_send_json_error( array(
+			'message' => __( 'Security check failed. Please refresh the page and try again.', 'payu-payment-links' ),
+			'debug'   => defined( 'WP_DEBUG' ) && WP_DEBUG ? array( 'nonce_received' => substr( $nonce, 0, 10 ) . '...' ) : null,
+		) );
+		return;
+	}
+
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array(
+			'message' => __( 'You do not have permission to perform this action.', 'payu-payment-links' ),
+		) );
+		return;
+	}
+
+	// Set up request parameters for list table
+	$_REQUEST['environment_filter'] = isset( $_POST['environment_filter'] ) ? sanitize_text_field( wp_unslash( $_POST['environment_filter'] ) ) : '';
+	$_REQUEST['paged'] = isset( $_POST['paged'] ) && absint( $_POST['paged'] ) > 0 ? absint( $_POST['paged'] ) : 1;
+	$_REQUEST['orderby'] = isset( $_POST['orderby'] ) ? sanitize_text_field( wp_unslash( $_POST['orderby'] ) ) : '';
+	$_REQUEST['order'] = isset( $_POST['order'] ) ? sanitize_text_field( wp_unslash( $_POST['order'] ) ) : '';
+	$_REQUEST['s'] = isset( $_POST['s'] ) ? sanitize_text_field( wp_unslash( $_POST['s'] ) ) : ''; // Search term
+
+	// Load the list table class
+	require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-config-list-table.php';
+
+	// Create an instance of our custom list table
+	$list_table = new PayU_Config_List_Table();
+
+	// Prepare items (this handles pagination and filtering)
+	$list_table->prepare_items();
+
+	// Capture the table output
+	// Note: display() method automatically calls extra_tablenav('top') internally
+	ob_start();
+	$list_table->display();
+	$table_html = ob_get_clean();
+
+	// Check if output was captured successfully
+	if ( false === $table_html ) {
+		wp_send_json_error( array(
+			'message' => __( 'Failed to generate table HTML.', 'payu-payment-links' ),
+		) );
+		return;
+	}
+
+	wp_send_json_success( array(
+		'html' => $table_html,
+	) );
+}
+
+/**
+ * AJAX handler for toggling configuration status
+ * Handles status toggle with currency-based logic:
+ * - If same currency has multiple environments, only one can be active
+ * - If only one record exists for a currency, allow both active/inactive
+ *
+ * @return void
+ */
+function payu_ajax_toggle_status() {
+	// Check request method
+	if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( $_SERVER['REQUEST_METHOD'] ) : '' ) ) {
+		wp_send_json_error( array(
+			'message' => __( 'Invalid request method.', 'payu-payment-links' ),
+		) );
+		return;
+	}
+
+	// Check nonce
+	if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'payu_toggle_status' ) ) {
+		wp_send_json_error( array(
+			'message' => __( 'Security check failed. Please refresh the page and try again.', 'payu-payment-links' ),
+		) );
+		return;
+	}
+
+	// Check permissions
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array(
+			'message' => __( 'You do not have permission to perform this action.', 'payu-payment-links' ),
+		) );
+		return;
+	}
+	
+	// Validate and sanitize input
+	$config_id = isset( $_POST['config_id'] ) ? absint( $_POST['config_id'] ) : 0;
+	$currency = isset( $_POST['currency'] ) ? sanitize_text_field( wp_unslash( $_POST['currency'] ) ) : '';
+	$new_status = isset( $_POST['status'] ) ? sanitize_text_field( wp_unslash( $_POST['status'] ) ) : '';
+
+	if ( ! $config_id || ! $currency ) {
+		wp_send_json_error( array(
+			'message' => __( 'Invalid configuration ID or currency.', 'payu-payment-links' ),
+		) );
+		return;
+	}
+
+	if ( ! in_array( $new_status, array( 'active', 'inactive' ), true ) ) {
+		wp_send_json_error( array(
+			'message' => __( 'Invalid status value.', 'payu-payment-links' ),
+		) );
+		return;
+	}
+
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	$current_time = current_time( 'mysql' );
+
+	// Optimized: Single query to get config and verify currency match
+	$config_data = $wpdb->get_row(
+		$wpdb->prepare(
+			"SELECT id, currency, environment, status FROM {$table_name} 
+			WHERE id = %d AND currency = %s AND deleted_at IS NULL",
+			$config_id,
+			$currency
+		),
+		ARRAY_A
+	);
+
+	if ( ! $config_data ) {
+		wp_send_json_error( array(
+			'message' => __( 'Configuration not found or currency mismatch.', 'payu-payment-links' ),
+		) );
+		return;
+	}
+
+	// Skip update if status is already the same
+	if ( $config_data['status'] === $new_status ) {
+		wp_send_json_success( array(
+			'message' => __( 'Status already set.', 'payu-payment-links' ),
+			'status' => $new_status,
+			'config_id' => $config_id,
+			'deactivated_ids' => array(),
+		) );
+		return;
+	}
+
+	// Check if activating and there's already an active record with same currency
+	if ( 'active' === $new_status ) {
+		$existing_active_count = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$table_name} 
+				WHERE currency = %s 
+				AND id != %d 
+				AND status = 'active'
+				AND deleted_at IS NULL",
+				$currency,
+				$config_id
+			)
+		);
+
+		// If there's already an active record, prevent activation and return error
+		if ( $existing_active_count > 0 ) {
+			wp_send_json_error( array(
+				'message' => sprintf(
+					__( 'Cannot activate: There is already %d active configuration(s) for currency %s. Only one active configuration per currency is allowed. Please deactivate the existing active configuration first.', 'payu-payment-links' ),
+					$existing_active_count,
+					$currency
+				),
+				'prevent_update' => true,
+			) );
+			return;
+		}
+	}
+
+	// No conflict - proceed with update
+	$updated = $wpdb->update(
+		$table_name,
+		array(
+			'status' => $new_status,
+			'updated_at' => $current_time,
+		),
+		array( 'id' => $config_id ),
+		array( '%s', '%s' ),
+		array( '%d' )
+	);
+
+	if ( false === $updated ) {
+		wp_send_json_error( array(
+			'message' => __( 'Failed to update configuration status.', 'payu-payment-links' ),
+		) );
+		return;
+	}
+
+	wp_send_json_success( array(
+		'message' => __( 'Status updated successfully.', 'payu-payment-links' ),
+		'status' => $new_status,
+		'config_id' => $config_id,
+		'deactivated_ids' => array(),
+	) );
+}
