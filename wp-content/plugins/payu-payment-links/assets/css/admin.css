@@ -348,6 +348,32 @@
 	font-weight: 600;
 }
 
+/* Row actions (Edit / Delete icons) */
+.payu-row-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+.payu-action-link {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: #50575e;
+	text-decoration: none;
+	transition: color 0.15s ease;
+}
+.payu-action-link:hover {
+	color: #2271b1;
+}
+.payu-action-link .dashicons {
+	font-size: 18px;
+	width: 18px;
+	height: 18px;
+}
+.payu-action-link.payu-action-delete:hover {
+	color: #b32d2e;
+}
+
 /* Status Toggle Switch Styles - Rounded Switch */
 .payu-status-toggle {
 	position: relative;
@@ -365,6 +391,10 @@
 	position: absolute;
 	margin: 0;
 	padding: 0;
+	outline: none; /* Prevent browser default blue focus ring */
+}
+.payu-status-toggle-input:focus {
+	outline: none;
 }
 
 .payu-status-toggle-slider {
@@ -404,8 +434,9 @@
 }
 
 .payu-status-toggle-input:focus + .payu-status-toggle-slider {
-	outline: 2px solid #2271b1;
-	outline-offset: 2px;
+	outline: none;
+	box-shadow: 0 0 0 1px #8c8f94;
+	outline-offset: 0;
 }
 
 .payu-status-toggle-input:disabled + .payu-status-toggle-slider {
@@ -418,33 +449,76 @@
 	background-color: #8c8f94;
 }
 
+/* Status cell wrapper - loading spinner and message */
+.payu-status-cell {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.payu-status-loading-wrap {
+	display: none;
+	align-items: center;
+	gap: 6px;
+}
+
+.payu-status-loading-text {
+	font-size: 12px;
+	color: #646970;
+	font-style: italic;
+	white-space: nowrap;
+}
+
+/* Show loading wrap (spinner + text) when toggle is loading */
+.payu-status-cell .payu-status-toggle.payu-status-toggle-loading ~ .payu-status-loading-wrap {
+	display: inline-flex;
+}
+
+/* Loading spinner - neutral gray so it doesn’t look like browser “hanging” spinner */
+.payu-status-spinner {
+	display: inline-block;
+	width: 16px;
+	height: 16px;
+	border: 2px solid #c3c4c7;
+	border-top-color: #646970;
+	border-radius: 50%;
+	animation: payu-spinner-rotate 0.8s linear infinite;
+	vertical-align: middle;
+	flex-shrink: 0;
+}
+
+@keyframes payu-spinner-rotate {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Loading state: dim switch, remove any focus/blue ring from icon, cursor wait */
 .payu-status-toggle.payu-status-toggle-loading .payu-status-toggle-slider {
 	opacity: 0.7;
 	cursor: wait;
+	box-shadow: none;
+	outline: none;
+}
+
+.payu-status-toggle.payu-status-toggle-loading .payu-status-toggle-input:focus + .payu-status-toggle-slider {
+	box-shadow: none;
+	outline: none;
 }
 
 .payu-status-toggle.payu-status-toggle-loading .payu-status-toggle-slider:before {
-	animation: payu-toggle-pulse 1.5s ease-in-out infinite;
+	opacity: 1;
 }
 
 .payu-status-toggle:hover:not(.payu-status-toggle-loading) .payu-status-toggle-slider {
-	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15), 0 0 0 2px rgba(34, 113, 177, 0.1);
+	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15), 0 0 0 2px rgba(0, 0, 0, 0.08);
 }
 
 .payu-status-toggle:hover:not(.payu-status-toggle-loading) .payu-status-toggle-input:checked + .payu-status-toggle-slider {
 	background-color: #3fa048;
 }
 
-@keyframes payu-toggle-pulse {
-	0%, 100% {
-		opacity: 1;
-		transform: translateX(22px) scale(1);
-	}
-	50% {
-		opacity: 0.7;
-		transform: translateX(22px) scale(0.95);
-	}
-}
 
 /* AJAX Loading State */
 .payu-config-list #payu-config-list-wrapper {
@@ -641,7 +715,153 @@
 }
 
 
+/* ==========================================================================
+   Responsive styles
+   ========================================================================== */
+
+/* Tablet and below (WordPress admin fold point) */
 @media screen and (max-width: 782px) {
+	.payu-payment-links-admin-wrapper {
+		margin-left: -10px;
+		margin-right: -10px;
+	}
+
+	.payu-payment-links-admin-wrapper h2 {
+		margin: 15px 12px 10px;
+		font-size: 1.25rem;
+	}
+
+	.payu-config-list {
+		margin: 15px 10px;
+		border-radius: 2px;
+	}
+
+	.payu-config-list-header {
+		flex-wrap: wrap;
+		padding: 12px 16px;
+		gap: 12px;
+	}
+
+	.payu-config-list-title {
+		font-size: 13px;
+		line-height: 1.4;
+		flex: 1 1 100%;
+		order: 1;
+	}
+
+	.payu-config-list-actions {
+		margin-left: 0;
+		flex: 1 1 auto;
+		order: 2;
+	}
+
+	.payu-config-list-actions .button {
+		width: 100%;
+		justify-content: center;
+		min-height: 40px;
+		padding: 0 16px;
+	}
+
+	.payu-table-header {
+		flex-direction: column;
+		align-items: stretch;
+		padding: 12px 16px;
+		gap: 12px;
+	}
+
+	.payu-table-header-left {
+		width: 100%;
+	}
+
+	.payu-table-header-left .alignleft.actions select {
+		min-width: 0;
+		width: 100%;
+		max-width: 100%;
+	}
+
+	.payu-table-header-right {
+		width: 100%;
+	}
+
+	.payu-table-header-right .search-box {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 8px;
+	}
+
+	.payu-table-header-right .search-box input[type="search"] {
+		width: 100%;
+		max-width: 100%;
+		min-width: 0;
+	}
+
+	.payu-table-header-right .search-box #search-submit {
+		width: 100%;
+		min-height: 40px;
+	}
+
+	.payu-config-list #payu-config-list-wrapper {
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.payu-config-list .wp-list-table {
+		min-width: 600px;
+	}
+
+	.payu-config-list .wp-list-table th,
+	.payu-config-list .wp-list-table td {
+		padding: 10px 8px;
+		font-size: 13px;
+	}
+
+	.payu-config-list .tablenav {
+		flex-wrap: wrap;
+		padding: 10px 16px;
+		gap: 10px;
+	}
+
+	.payu-config-list .tablenav.bottom {
+		justify-content: center;
+	}
+
+	.payu-config-list .tablenav-pages {
+		float: none;
+		width: 100%;
+		text-align: center;
+	}
+
+	.payu-config-list .tablenav-pages .displaying-num {
+		display: block;
+		margin-right: 0;
+		margin-bottom: 8px;
+	}
+
+	.payu-config-list .tablenav-pages .pagination-links {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 4px;
+	}
+
+	.payu-config-list .tablenav-pages .pagination-links a,
+	.payu-config-list .tablenav-pages .pagination-links span {
+		min-width: 36px;
+		min-height: 36px;
+		line-height: 34px;
+		text-align: center;
+		padding: 0 10px;
+	}
+
+	.payu-config-list .tablenav-pages .pagination-links .current-page {
+		min-width: 44px;
+	}
+
+	.payu-add-configuration-form {
+		margin: 15px 10px;
+		padding: 16px;
+	}
+
 	.payu-add-configuration-form .form-table th,
 	.payu-add-configuration-form .form-table td {
 		display: block;
@@ -652,10 +872,143 @@
 
 	.payu-add-configuration-form .form-table th {
 		padding-bottom: 5px;
+		width: 100%;
+	}
+
+	.payu-add-configuration-form .form-table td input[type="text"],
+	.payu-add-configuration-form .form-table td input[type="password"],
+	.payu-add-configuration-form .form-table td select,
+	.payu-add-configuration-form .form-table td textarea {
+		width: 100%;
+		max-width: 100%;
+		box-sizing: border-box;
+	}
+
+	.payu-add-configuration-form .submit .button {
+		width: 100%;
+		margin-right: 0;
+		margin-bottom: 8px;
+		min-height: 40px;
+	}
+
+	.payu-button-container {
+		margin: 15px 10px;
 	}
 
 	.payu-button-container .button {
-		display: inline-block;
+		display: block;
+		width: 100%;
+		margin-right: 0;
 		margin-bottom: 8px;
+		min-height: 40px;
+		text-align: center;
+	}
+
+	.payu-ajax-messages {
+		margin: 12px 10px;
+		padding: 12px 36px 12px 12px;
+	}
+}
+
+/* Small tablet / large phone */
+@media screen and (max-width: 600px) {
+	.payu-config-list {
+		margin: 12px 8px;
+	}
+
+	.payu-config-list-header,
+	.payu-table-header {
+		padding: 10px 12px;
+	}
+
+	.payu-config-list .tablenav {
+		padding: 10px 12px;
+	}
+
+	.payu-config-list .wp-list-table {
+		min-width: 500px;
+		font-size: 12px;
+	}
+
+	.payu-config-list .wp-list-table th,
+	.payu-config-list .wp-list-table td {
+		padding: 8px 6px;
+	}
+
+	.payu-add-configuration-form {
+		margin: 12px 8px;
+		padding: 12px;
+	}
+
+	.payu-add-configuration-form h3 {
+		font-size: 13px;
+	}
+}
+
+/* Phone */
+@media screen and (max-width: 480px) {
+	.payu-payment-links-admin-wrapper h2 {
+		margin: 12px 8px 8px;
+		font-size: 1.1rem;
+	}
+
+	.payu-config-list {
+		margin: 10px 6px;
+		border-radius: 2px;
+	}
+
+	.payu-config-list-header {
+		padding: 10px 12px;
+	}
+
+	.payu-config-list-title {
+		font-size: 12px;
+	}
+
+	.payu-table-header {
+		padding: 10px 12px;
+	}
+
+	.payu-config-list .tablenav-pages .pagination-links a,
+	.payu-config-list .tablenav-pages .pagination-links span {
+		min-width: 32px;
+		min-height: 32px;
+		line-height: 30px;
+		padding: 0 6px;
+		font-size: 11px;
+	}
+
+	.payu-config-list .tablenav-pages .displaying-num {
+		font-size: 11px;
+	}
+
+	.payu-add-configuration-form {
+		margin: 10px 6px;
+		padding: 10px;
+	}
+
+	.payu-button-container {
+		margin: 10px 8px;
+	}
+
+	.payu-ajax-messages {
+		margin: 10px 8px;
+		padding: 10px 32px 10px 10px;
+		font-size: 12px;
+	}
+}
+
+/* Ensure touch-friendly tap targets on small screens */
+@media (pointer: coarse) {
+	.payu-config-list .tablenav-pages .pagination-links a,
+	.payu-config-list .tablenav-pages .pagination-links span:not(.disabled) {
+		min-height: 44px;
+		line-height: 42px;
+	}
+
+	.payu-config-list-actions .button,
+	.payu-table-header-right .search-box #search-submit,
+	.payu-add-configuration-form .submit .button {
+		min-height: 44px;
 	}
 }

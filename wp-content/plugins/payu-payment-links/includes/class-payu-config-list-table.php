@@ -46,6 +46,7 @@ class PayU_Config_List_Table extends WP_List_Table {
 			'environment' => __( 'Environment', 'payu-payment-links' ),
 			'status'      => __( 'Status', 'payu-payment-links' ),
 			'created_at'  => __( 'Created', 'payu-payment-links' ),
+			'actions'     => __( 'Actions', 'payu-payment-links' ),
 		);
 
 		return $columns;
@@ -180,7 +181,7 @@ class PayU_Config_List_Table extends WP_List_Table {
 		}
 
 		// Get pagination parameters
-		$per_page     = $this->get_items_per_page( 'payu_configs_per_page', 10 );
+		$per_page     = $this->get_items_per_page( 'payu_configs_per_page', 5 );
 		$current_page = $this->get_pagenum();
 
 		// Calculate offset
@@ -275,6 +276,40 @@ class PayU_Config_List_Table extends WP_List_Table {
 	}
 
 	/**
+	 * Render actions column (Edit, Delete with icons)
+	 *
+	 * @param object $item Configuration item.
+	 * @return string
+	 */
+	protected function column_actions( $item ) {
+		$config_id = absint( $item->id );
+		$base_url  = admin_url( 'admin.php?page=wc-settings&tab=checkout&section=payu_payment_links' );
+
+		$edit_url = add_query_arg( array( 'edit_payu_config' => $config_id ), $base_url );
+		$delete_url = wp_nonce_url(
+			add_query_arg( array( 'payu_delete_config' => $config_id ), $base_url ),
+			'payu_delete_config_' . $config_id,
+			'_wpnonce'
+		);
+
+		$edit_link = sprintf(
+			'<a href="%1$s" class="payu-action-link payu-action-edit" title="%2$s" aria-label="%2$s">%3$s</a>',
+			esc_url( $edit_url ),
+			esc_attr__( 'Edit', 'payu-payment-links' ),
+			'<span class="dashicons dashicons-edit" aria-hidden="true"></span>'
+		);
+		$delete_link = sprintf(
+			'<a href="%1$s" class="payu-action-link payu-action-delete" title="%2$s" aria-label="%2$s" onclick="return confirm(%3$s);">%4$s</a>',
+			esc_url( $delete_url ),
+			esc_attr__( 'Delete', 'payu-payment-links' ),
+			esc_attr( "'" . esc_js( __( 'Are you sure you want to delete this configuration?', 'payu-payment-links' ) ) . "'" ),
+			'<span class="dashicons dashicons-trash" aria-hidden="true"></span>'
+		);
+
+		return '<span class="payu-row-actions">' . $edit_link . ' ' . $delete_link . '</span>';
+	}
+
+	/**
 	 * Render merchant_id column
 	 *
 	 * @param object $item Configuration item.
@@ -322,7 +357,7 @@ class PayU_Config_List_Table extends WP_List_Table {
 		
 		$toggle_id = 'payu-toggle-' . $config_id;
 		
-		return sprintf(
+		$toggle_html = sprintf(
 			'<label class="%s" for="%s" data-config-id="%d" data-currency="%s">
 				<input type="checkbox" id="%s" class="payu-status-toggle-input" %s />
 				<span class="payu-status-toggle-slider"></span>
@@ -333,6 +368,17 @@ class PayU_Config_List_Table extends WP_List_Table {
 			$currency,
 			esc_attr( $toggle_id ),
 			checked( $is_active, true, false )
+		);
+
+		// Wrapper with loading spinner and message (shown when toggle is loading)
+		return sprintf(
+			'<div class="payu-status-cell">
+				%s
+				<span class="payu-status-loading-wrap" aria-live="polite">
+					<span class="payu-status-spinner"></span>
+				</span>
+			</div>',
+			$toggle_html
 		);
 	}
 

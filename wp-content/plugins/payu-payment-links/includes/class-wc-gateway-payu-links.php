@@ -37,6 +37,12 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 		global $hide_save_button;
 		$hide_save_button = true;
 
+		if(isset($_GET['edit_payu_config']) && !empty($_GET['edit_payu_config']))
+		{
+			$this->render_edit_configuration_form(absint($_GET['edit_payu_config']));	
+			return;
+		}
+
 		?>
 		<div class="payu-payment-links-admin-wrapper">
 			<h2><?php esc_html_e( 'PayU Payment Links', 'payu-payment-links' ); ?></h2>
@@ -129,13 +135,22 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Render Add Configuration form template.
-	 * Template function for form HTML rendering - reusable wherever needed.
+	 * Render Add Configuration form template. 
 	 *
 	 * @return void
 	 */
 	private function render_add_configuration_form() {
 		payu_render_configuration_form_template();
+	}
+
+
+	/**
+	 * Render Edit Configuration form template.
+	 * 
+	 * @return void
+	 */
+	private function render_edit_configuration_form( $config_id ) {
+		payu_render_edit_configuration_form_template( $config_id );
 	}
 
 	/**
@@ -186,6 +201,15 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 			?>
 			<div class="notice notice-success is-dismissible">
 				<p><?php esc_html_e( 'Currency configuration saved successfully.', 'payu-payment-links' ); ?></p>
+			</div>
+			<?php
+		}
+
+		// Check for delete notice
+		if ( isset( $_GET['payu_config_deleted'] ) && '1' === $_GET['payu_config_deleted'] ) {
+			?>
+			<div class="notice notice-success is-dismissible">
+				<p><?php esc_html_e( 'Configuration deleted successfully.', 'payu-payment-links' ); ?></p>
 			</div>
 			<?php
 		}
