@@ -73,13 +73,127 @@
 	cursor: pointer;
 }
 
-/* Edit form AJAX error – ensure visible when shown */
-#payu-edit-ajax-error.payu-edit-ajax-error {
-	margin: 0 0 1em 0;
+/* Edit configuration screen – wrapper and form layout (sibling of WC form) */
+.payu-edit-wrapper {
+	margin: 1em 0 0 0;
+	padding: 20px;
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	border-radius: 4px;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
 }
-#payu-edit-ajax-error.payu-edit-ajax-error[style*="display: block"],
-#payu-edit-ajax-error.payu-edit-ajax-error:not([style*="display: none"]) {
+
+.payu-edit-wrapper > a.button {
+	display: inline-block;
+	margin-bottom: 1em;
+}
+
+.payu-edit-wrapper .payu-edit-title {
+	margin: 0 0 1em 0;
+	padding: 0;
+	font-size: 1.3em;
+}
+
+.payu-edit-wrapper .form-table {
+	margin: 0 0 1em 0;
+	text-align: left;
+}
+
+.payu-edit-wrapper .form-table th {
+	padding: 20px 10px 20px 0;
+	width: 200px;
+	text-align: left;
+	vertical-align: top;
+}
+
+.payu-edit-wrapper .form-table td {
+	padding: 15px 10px;
+	text-align: left;
+}
+
+.payu-edit-wrapper .form-table td .description {
+	margin: 0.5em 0 0 0;
+	color: #646970;
+	font-size: 13px;
+}
+
+.payu-edit-wrapper .form-table tr + tr th,
+.payu-edit-wrapper .form-table tr + tr td {
+	border-top: 1px solid #dcdcde;
+}
+
+.payu-edit-wrapper .submit {
+	display: block;
+	margin: 20px 0 0 0;
+	padding: 0;
+	text-align: left;
+}
+
+.payu-edit-wrapper .submit .button {
+	margin-right: 8px;
+	height: 32px;
+	line-height: 30px;
+	padding: 0 12px;
+	font-size: 13px;
+}
+
+.payu-edit-wrapper .submit .button:last-child {
+	margin-right: 0;
+}
+
+/* Edit form AJAX message – hidden by default */
+#payu-edit-ajax-error.payu-edit-ajax-message:not(.payu-edit-message-visible) {
+	display: none !important;
+	margin: 0;
+	padding: 0;
+	border: none;
+	background: none;
+}
+/* When message is shown (error or success) – force visible with WP notice look */
+#payu-edit-ajax-error.payu-edit-message-visible {
 	display: block !important;
+	visibility: visible !important;
+	position: relative;
+	margin: 0 0 1em 0;
+	padding: 10px 36px 10px 12px;
+	border-left: 4px solid transparent;
+}
+#payu-edit-ajax-error.payu-edit-message-visible.notice-error {
+	background-color: #fcf0f1;
+	border-left-color: #d63638;
+}
+#payu-edit-ajax-error.payu-edit-message-visible.notice-success {
+	background-color: #edfaef;
+	border-left-color: #00a32a;
+}
+/* Dismiss (cross) button – show icon */
+#payu-edit-ajax-error .notice-dismiss {
+	position: absolute;
+	top: 0;
+	right: 0;
+	border: none;
+	margin: 0;
+	padding: 9px;
+	background: none;
+	cursor: pointer;
+	color: #787c82;
+}
+#payu-edit-ajax-error .notice-dismiss:hover {
+	color: #1d2327;
+}
+#payu-edit-ajax-error .notice-dismiss::before {
+	content: "\f153";
+	font: normal 20px/1 dashicons;
+	speak: none;
+	display: block;
+	-webkit-font-smoothing: antialiased;
+}
+#payu-edit-ajax-error .notice-dismiss .screen-reader-text {
+	clip: rect(1px, 1px, 1px, 1px);
+	height: 1px;
+	overflow: hidden;
+	position: absolute;
+	width: 1px;
 }
 
 .payu-button-container {

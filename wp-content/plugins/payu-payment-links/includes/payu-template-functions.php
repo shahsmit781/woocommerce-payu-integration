@@ -163,7 +163,7 @@ function payu_render_edit_configuration_form_template( $config_id ) {
 			
 		<h2 class="payu-edit-title"><?php esc_html_e( 'Edit Currency Configuration', 'payu-payment-links' ); ?></h2>
 		<form method="post" id="payu-edit-config-form" class="payu-edit-config-form">
-			<div id="payu-edit-ajax-error" class="notice notice-error is-dismissible payu-edit-ajax-error" role="alert" style="display:none;"><p></p></div>
+			<div id="payu-edit-ajax-error" class="payu-edit-ajax-message" role="alert" style="display:none;" aria-live="polite"><p></p></div>
 			<?php wp_nonce_field( 'payu_update_config', 'payu_update_config_nonce' ); ?>
 			<input type="hidden" name="config_id" value="<?php echo esc_attr( (string) $config->id ); ?>">
 

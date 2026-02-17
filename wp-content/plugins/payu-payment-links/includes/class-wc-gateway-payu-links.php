@@ -56,6 +56,7 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 			<?php
 			$this->render_edit_configuration_form( $edit_config_id );
 			?>
+			<form method="post" id="payu-dummy-form" action="" enctype="multipart/form-data" style="display:none;" aria-hidden="true">
 			<?php
 			return;
 		}

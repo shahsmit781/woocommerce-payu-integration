@@ -61,9 +61,20 @@
 
 
 	jQuery(document).on('click', '.notice.is-dismissible', function (e) {
-		if (jQuery(e.target).hasClass('notice-dismiss') || jQuery(e.target).closest('.notice-dismiss').length) {
-			jQuery(this).fadeOut();
+		if (!jQuery(e.target).hasClass('notice-dismiss') && !jQuery(e.target).closest('.notice-dismiss').length) {
+			return;
 		}
+		var $notice = jQuery(this);
+		// Edit form AJAX message: fully remove notification (reset visibility, clear content)
+		if ($notice.attr('id') === 'payu-edit-ajax-error') {
+			$notice.removeClass('payu-edit-message-visible notice-error notice-success');
+			$notice.removeAttr('style');
+			$notice.find('p').empty();
+			$notice.find('.notice-dismiss').remove();
+			$notice.hide();
+			return;
+		}
+		$notice.fadeOut();
 	});
 
 	// Field-wise validation functions
@@ -1006,13 +1017,27 @@
 			var data = $form.serialize() + '&action=payu_update_currency_config';
 			$btn.prop('disabled', true);
 
+			function showUpdateMessage(msg, isError) {
+				var text = msg || (isError ? 'Update failed.' : '');
+				var $container = $form.find('#payu-edit-ajax-error');
+				if (!$container.length) {
+					$container = $('#payu-edit-ajax-error');
+				}
+				if (!$container.length) {
+					$container = $('<div id="payu-edit-ajax-error" class="payu-edit-ajax-message payu-edit-message-visible" role="alert"><p></p></div>');
+					$form.prepend($container);
+				}
+				$container.removeClass('notice-success notice-error payu-edit-message-success').addClass('notice is-dismissible payu-edit-message-visible').addClass(isError ? 'notice-error' : 'notice-success');
+				var $p = $container.find('p');
+				if (!$p.length) $p = $('<p>').appendTo($container);
+				$p.text(text);
+				$container.find('.notice-dismiss').remove();
+				$container.append('<button type="button" class="notice-dismiss"><span class="screen-reader-text">Dismiss this notice.</span></button>');
+				$container.css({ display: 'block', visibility: 'visible', opacity: '1', marginBottom: '1em', padding: '10px 12px', borderLeftWidth: '4px', borderLeftStyle: 'solid' }).attr('style', 'display: block !important; visibility: visible !important; margin-bottom: 1em; padding: 10px 12px; border-left-width: 4px; border-left-style: solid; ' + (isError ? 'background-color: #fcf0f1; border-left-color: #d63638;' : 'background-color: #edfaef; border-left-color: #00a32a;'));
+				if ($container[0]) $container[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+			}
 			function showUpdateError(msg) {
-				var $err = $form.find('#payu-edit-ajax-error');
-				if (!$err.length) $err = $('#payu-edit-ajax-error');
-				if (!$err.length) return;
-				$err.find('p').text(msg || 'Update failed.');
-				$err.css('display', 'block').show();
-				if ($err[0]) $err[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+				showUpdateMessage(msg, true);
 			}
 
 			function resetSubmitState() {
@@ -1030,19 +1055,30 @@
 						window.location.href = response.data.redirect;
 						return;
 					}
-					// WordPress wp_send_json_error returns 200 with success: false and data.message
-					var msg = (response && response.data && response.data.message) ? response.data.message : 'Update failed.';
+					var msg = 'Update failed.';
+					if (response && response.data && response.data.message) {
+						msg = response.data.message;
+					} else if (response && response.message) {
+						msg = response.message;
+					} else if (response && response.data && typeof response.data === 'string') {
+						msg = response.data;
+					}
 					showUpdateError(msg);
 					resetSubmitState();
 				},
 				error: function (xhr) {
 					var msg = 'Request failed. Please try again.';
-					if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
-						msg = xhr.responseJSON.data.message;
+					if (xhr.responseJSON) {
+						if (xhr.responseJSON.data && xhr.responseJSON.data.message) {
+							msg = xhr.responseJSON.data.message;
+						} else if (xhr.responseJSON.message) {
+							msg = xhr.responseJSON.message;
+						}
 					} else if (xhr.responseText) {
 						try {
 							var parsed = JSON.parse(xhr.responseText);
 							if (parsed.data && parsed.data.message) msg = parsed.data.message;
+							else if (parsed.message) msg = parsed.message;
 						} catch (e) {}
 					}
 					showUpdateError(msg);
@@ -1052,10 +1088,24 @@
 			return false;
 		});
 
-		// Remove error param from URL on edit page so refresh does not show the message again
-		if ($('#payu-edit-config-form').length && window.location.search.indexOf('payu_config_error') !== -1) {
-			var url = new URL(window.location.href);
-			url.searchParams.delete('payu_config_error');
+		// Remove message params from URL after display so refresh/revisit does not show again
+		var url = new URL(window.location.href);
+		var changed = false;
+		if ($('#payu-edit-config-form').length) {
+			if (url.searchParams.has('payu_config_error')) {
+				url.searchParams.delete('payu_config_error');
+				changed = true;
+			}
+		}
+		if ($('#payu-config-list-container').length && !$('#payu-edit-config-form').length) {
+			['payu_config_deleted', 'payu_config_updated', 'payu_config_saved'].forEach(function (param) {
+				if (url.searchParams.has(param)) {
+					url.searchParams.delete(param);
+					changed = true;
+				}
+			});
+		}
+		if (changed) {
 			window.history.replaceState({}, document.title, url.toString());
 		}
 	});
