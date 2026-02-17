@@ -73,6 +73,15 @@
 	cursor: pointer;
 }
 
+/* Edit form AJAX error – ensure visible when shown */
+#payu-edit-ajax-error.payu-edit-ajax-error {
+	margin: 0 0 1em 0;
+}
+#payu-edit-ajax-error.payu-edit-ajax-error[style*="display: block"],
+#payu-edit-ajax-error.payu-edit-ajax-error:not([style*="display: none"]) {
+	display: block !important;
+}
+
 .payu-button-container {
 	margin: 20px 0;
 	padding: 0;

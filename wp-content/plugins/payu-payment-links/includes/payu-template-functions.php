@@ -93,7 +93,7 @@ function payu_render_configuration_form_template()
 							</label>
 						</th>
 						<td class="forminp forminp-password">
-							<input type="password" name="payu_config_client_secret" id="payu_config_client_secret" class="regular-text" value="" required aria-required="true" autocomplete="new-password">
+							<input type="password" name="payu_config_client_secret" id="payu_config_client_secret" class="regular-text" value="" required aria-required="true" maxlength="500" autocomplete="new-password">
 							<span id="payu_config_client_secret_error" class="payu-field-error-container"></span>
 						</td>
 					</tr>
@@ -130,79 +130,123 @@ function payu_render_configuration_form_template()
 }
 
 function payu_render_edit_configuration_form_template( $config_id ) {
-	if (! current_user_can('manage_woocommerce')) {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
 		return;
 	}
 
-	global $wpdb;
-	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	$config_id = absint( $config_id );
+	$list_url  = admin_url( 'admin.php?page=wc-settings&tab=checkout&section=payu_payment_links' );
+	$error_msg = __( 'Configuration not found.', 'payu-payment-links' );
 
-	$config = $wpdb->get_row(
-		$wpdb->prepare(
-			"SELECT * FROM {$table_name} WHERE id = %d AND deleted_at IS NULL",
-			$config_id
-		)
-	);
-
-	if (! $config) {
-		echo '<div class="notice notice-error"><p>';
-		esc_html_e('Configuration not found.', 'payu-payment-links');
-		echo '</p></div>';
-		return;
+	if ( ! $config_id ) {
+		wp_safe_redirect( add_query_arg( 'payu_config_error', urlencode( $error_msg ), $list_url ) );
+		exit;
 	}
 
-	$back_url = admin_url(
-		'admin.php?page=wc-settings&tab=checkout&section=payu_payment_links'
-	);
-?>
+	$config = payu_get_currency_config_by_id( $config_id );
+	if ( ! $config ) {
+		wp_safe_redirect( add_query_arg( 'payu_config_error', urlencode( $error_msg ), $list_url ) );
+		exit;
+	}
 
+	$back_url        = admin_url( 'admin.php?page=wc-settings&tab=checkout&section=payu_payment_links' );
+	$edit_page_error = isset( $_GET['payu_config_error'] ) ? urldecode( sanitize_text_field( wp_unslash( $_GET['payu_config_error'] ) ) ) : '';
+	?>
 	<div class="payu-edit-wrapper">
-		<a href="<?php echo esc_url($back_url); ?>" class="button">
-			← <?php esc_html_e('Back to Configurations', 'payu-payment-links'); ?>
-		</a>
-
-		<h2 style="margin-top: 16px;">
-			<?php esc_html_e('Edit Currency Configuration', 'payu-payment-links'); ?>
-		</h2>
-
+		<?php if ( $edit_page_error !== '' ) : ?>
+			<div class="notice notice-error is-dismissible">
+				<p><?php echo esc_html( $edit_page_error ); ?></p>
+			</div>
+			<?php endif; ?>
+			
+			<a href="<?php echo esc_url( $back_url ); ?>" class="button">← <?php esc_html_e( 'Back to Configurations', 'payu-payment-links' ); ?></a>
+			
+		<h2 class="payu-edit-title"><?php esc_html_e( 'Edit Currency Configuration', 'payu-payment-links' ); ?></h2>
 		<form method="post" id="payu-edit-config-form" class="payu-edit-config-form">
-			<?php wp_nonce_field('payu_update_config', 'payu_update_config_nonce'); ?>
-			<input type="hidden" name="config_id" value="<?php echo esc_attr($config->id); ?>">
+			<div id="payu-edit-ajax-error" class="notice notice-error is-dismissible payu-edit-ajax-error" role="alert" style="display:none;"><p></p></div>
+			<?php wp_nonce_field( 'payu_update_config', 'payu_update_config_nonce' ); ?>
+			<input type="hidden" name="config_id" value="<?php echo esc_attr( (string) $config->id ); ?>">
 
 			<table class="form-table">
 				<tbody>
 
 					<tr>
-						<th scope="row"><?php esc_html_e('Currency', 'payu-payment-links'); ?></th>
+						<th scope="row">
+							<label for="payu_edit_currency">
+								<?php esc_html_e('Currency', 'payu-payment-links'); ?>
+							</label>
+						</th>
 						<td>
-							<input type="text" class="regular-text"
-								value="<?php echo esc_attr($config->currency); ?>" disabled>
+							<input type="text" class="regular-text" name="payu_edit_currency" id="payu_edit_currency" 
+							value="<?php echo esc_attr($config->currency); ?>" disabled>
 						</td>
 					</tr>
 
 					<tr>
-						<th scope="row"><?php esc_html_e('Merchant ID', 'payu-payment-links'); ?></th>
+						<th scope="row">
+							<label for="payu_edit_merchant_id">
+								<?php esc_html_e('Merchant ID', 'payu-payment-links'); ?>
+								<span class="required">*</span>
+								<?php echo wc_help_tip(__('Your PayU Merchant ID from the PayU dashboard.', 'payu-payment-links')); ?>
+							</label>
+						</th>
 						<td>
-							<input type="text" name="merchant_id" id="payu_edit_merchant_id" class="regular-text" value="<?php echo esc_attr($config->merchant_id); ?>" required>
+							<input type="text" name="merchant_id" id="payu_edit_merchant_id" class="regular-text" value="<?php echo esc_attr($config->merchant_id); ?>" >
 							<span id="payu_edit_merchant_id_error" class="payu-field-error-container"></span>
 						</td>
 					</tr>
 
 					<tr>
-						<th scope="row"><?php esc_html_e('Client ID', 'payu-payment-links'); ?></th>
+						<th scope="row">
+							<label for="payu_edit_client_id">
+								<?php esc_html_e('Client ID', 'payu-payment-links'); ?>
+								<span class="required">*</span>
+								<?php echo wc_help_tip(__('Your PayU Client ID from the PayU dashboard.', 'payu-payment-links')); ?>
+							</label>
+						</th>
 						<td>
 							<input type="text" name="client_id" id="payu_edit_client_id" class="regular-text"
-								value="<?php echo esc_attr($config->client_id); ?>" required>
+								value="<?php echo esc_attr($config->client_id); ?>" >
 							<span id="payu_edit_client_id_error" class="payu-field-error-container"></span>
 						</td>
 					</tr>
 
 					<tr>
-						<th scope="row"><?php esc_html_e('Environment', 'payu-payment-links'); ?></th>
+						<th scope="row" class="titledesc">
+							<label for="payu_edit_client_secret">
+								<?php esc_html_e( 'Client Secret', 'payu-payment-links' ); ?>
+								<?php echo wc_help_tip( __( 'Leave blank to keep current, or enter a new secret.', 'payu-payment-links' ) ); ?>
+							</label>
+						</th>
+						<td class="forminp forminp-password">
+							<input
+								type="password"
+								name="payu_edit_client_secret"
+								id="payu_edit_client_secret"
+								class="regular-text"
+								value=""
+								placeholder="<?php echo esc_attr__( 'Leave blank to keep current', 'payu-payment-links' ); ?>"
+								maxlength="500"
+								autocomplete="new-password"
+							>
+							<p class="description">
+								<?php esc_html_e( 'Leave blank to keep current, or enter a new secret.', 'payu-payment-links' ); ?>
+							</p>
+							<span id="payu_edit_client_secret_error" class="payu-field-error-container"></span>
+						</td>
+					</tr>
+
+					<tr>
+						<th scope="row">
+							<label for="payu_edit_environment">
+								<?php esc_html_e( 'Environment', 'payu-payment-links' ); ?>
+								<?php echo wc_help_tip( __( 'Select UAT for testing or Production for live transactions.', 'payu-payment-links' ) ); ?>
+							</label>
+						</th>
 						<td>
-							<select name="environment">
-								<option value="uat" <?php selected($config->environment, 'uat'); ?>>UAT</option>
-								<option value="prod" <?php selected($config->environment, 'prod'); ?>>Production</option>
+							<select name="environment" id="payu_edit_environment">
+								<option value="uat" <?php selected( $config->environment, 'uat' ); ?>><?php esc_html_e( 'UAT (Sandbox)', 'payu-payment-links' ); ?></option>
+								<option value="prod" <?php selected( $config->environment, 'prod' ); ?>><?php esc_html_e( 'Production', 'payu-payment-links' ); ?></option>
 							</select>
 						</td>
 					</tr>

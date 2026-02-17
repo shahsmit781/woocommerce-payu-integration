@@ -46,6 +46,284 @@ function payu_handle_delete_config() {
 	exit;
 }
 add_action( 'admin_init', 'payu_handle_delete_config' );
+add_action( 'admin_init', 'payu_handle_update_config' );
+
+/**
+ * Soft-delete a currency config by ID (set deleted_at).
+ *
+ * @param int $config_id Config ID.
+ * @return bool True if row was updated.
+ */
+function payu_soft_delete_currency_config( $config_id ) {
+	$config_id = absint( $config_id );
+	if ( ! $config_id ) {
+		return false;
+	}
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	$result     = $wpdb->update(
+		$table_name,
+		array( 'deleted_at' => current_time( 'mysql' ) ),
+		array( 'id' => $config_id ),
+		array( '%s' ),
+		array( '%d' )
+	);
+	return false !== $result;
+}
+
+/**
+ * Get a single currency config by ID (non-deleted).
+ *
+ * @param int $config_id Config ID.
+ * @return object|null Row object or null if not found.
+ */
+function payu_get_currency_config_by_id( $config_id ) {
+	$config_id = absint( $config_id );
+	if ( ! $config_id ) {
+		return null;
+	}
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	return $wpdb->get_row(
+		$wpdb->prepare(
+			"SELECT * FROM {$table_name} WHERE id = %d AND deleted_at IS NULL",
+			$config_id
+		)
+	);
+}
+
+/**
+ * Handle update configuration request (POST + nonce).
+ * Validates input, checks uniqueness, updates DB, redirects with success/error.
+ *
+ * @return void
+ */
+function payu_handle_update_config() {
+
+	if ( ! isset( $_POST['payu_update_config'] ) || ! isset( $_POST['payu_update_config_nonce'] ) ) {
+		return;
+	}
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		return;
+	}
+
+	$nonce = isset( $_POST['payu_update_config_nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['payu_update_config_nonce'] ) ) : '';
+	if ( ! wp_verify_nonce( $nonce, 'payu_update_config' ) ) {
+		$redirect = add_query_arg(
+			'payu_config_error',
+			urlencode( __( 'Security check failed. Please try again.', 'payu-payment-links' ) ),
+			admin_url( 'admin.php?page=wc-settings&tab=checkout&section=payu_payment_links' )
+		);
+		wp_safe_redirect( $redirect );
+		exit;
+	}
+
+	$validated = payu_validate_edit_config_input( $_POST );
+	if ( is_wp_error( $validated ) ) {
+		$msg      = $validated->get_error_message();
+		$edit_id  = isset( $_POST['config_id'] ) ? absint( $_POST['config_id'] ) : 0;
+		$base     = admin_url( 'admin.php?page=wc-settings&tab=checkout&section=payu_payment_links' );
+		$redirect = add_query_arg(
+			array(
+				'payu_config_error' => urlencode( $msg ? $msg : __( 'Validation failed.', 'payu-payment-links' ) ),
+				'edit_payu_config'   => $edit_id,
+			),
+			$base
+		);
+		wp_safe_redirect( $redirect );
+		exit;
+	}
+
+	$result = payu_process_update_currency_config( $validated );
+	$base   = admin_url( 'admin.php?page=wc-settings&tab=checkout&section=payu_payment_links' );
+	if ( is_wp_error( $result ) ) {
+		wp_safe_redirect( add_query_arg(
+			array(
+				'payu_config_error' => urlencode( $result->get_error_message() ),
+				'edit_payu_config'  => $validated['config_id'],
+			),
+			$base
+		) );
+	} else {
+		wp_safe_redirect( add_query_arg( 'payu_config_updated', '1', $base ) );
+	}
+	exit;
+}
+
+/**
+ * Process update currency config: token generation + update or delete+insert (reuses add flow when merchant changes).
+ *
+ * @param array $validated Validated edit form data (config_id, merchant_id, client_id, client_secret, environment).
+ * @return true|WP_Error True on success, WP_Error on failure.
+ */
+function payu_process_update_currency_config( $validated ) {
+	$config = payu_get_currency_config_by_id( $validated['config_id'] );
+	if ( ! $config ) {
+		return new WP_Error( 'config_not_found', __( 'Configuration not found.', 'payu-payment-links' ) );
+	}
+	if ( ! payu_is_currency_environment_unique( $config->currency, $validated['merchant_id'], $validated['environment'], $validated['config_id'] ) ) {
+		return new WP_Error( 'duplicate', __( 'This Merchant ID and Environment combination is already in use for another configuration.', 'payu-payment-links' ) );
+	}
+	$client_secret_plain = $validated['client_secret'];
+	if ( '' === $client_secret_plain && ! empty( $config->client_secret ) ) {
+		$decrypted           = payu_decrypt_client_secret( $config->client_secret );
+		$client_secret_plain = ( false !== $decrypted ) ? $decrypted : '';
+	}
+
+	if ( $validated['merchant_id'] !== $config->merchant_id ) {
+		// Merchant ID changed: new credentials required; cannot use old config's secret.
+		if ( '' === $client_secret_plain ) {
+			return new WP_Error( 'client_secret_required', __( 'Client Secret is required when changing Merchant ID.', 'payu-payment-links' ) );
+		}
+		// Delete current record, then generate token and insert new (same as add flow).
+		if ( ! payu_soft_delete_currency_config( $validated['config_id'] ) ) {
+			return new WP_Error( 'update_failed', __( 'Failed to update configuration.', 'payu-payment-links' ) );
+		}
+		$api_result = payu_verify_api_credentials(
+			$validated['merchant_id'],
+			$validated['client_id'],
+			$client_secret_plain,
+			$validated['environment'],
+			$config->currency
+		);
+		if ( is_wp_error( $api_result ) ) {
+			return $api_result;
+		}
+		$save_data = array(
+			'currency'      => $config->currency,
+			'merchant_id'   => $validated['merchant_id'],
+			'client_id'     => $validated['client_id'],
+			'client_secret' => $client_secret_plain,
+			'environment'   => $validated['environment'],
+		);
+		$new_id = payu_save_currency_config_to_db( $save_data );
+		if ( ! $new_id ) {
+			return new WP_Error( 'save_failed', __( 'Failed to save new configuration.', 'payu-payment-links' ) );
+		}
+		return true;
+	}
+	
+	$api_result = payu_verify_api_credentials(
+		$validated['merchant_id'],
+		$validated['client_id'],
+		$client_secret_plain,
+		$validated['environment'],
+		$config->currency
+	);
+
+	if ( is_wp_error( $api_result ) ) {
+		return $api_result;
+	}
+
+	$updated = payu_update_currency_config_in_db( $validated );
+	if ( ! $updated ) {
+		return new WP_Error( 'update_failed', __( 'Failed to update configuration.', 'payu-payment-links' ) );
+	}
+	return true;
+}
+
+/**
+ * AJAX handler for update currency configuration.
+ * Uses payu_process_update_currency_config for token + update/delete+insert (same as add flow when merchant changes).
+ *
+ * @return void
+ */
+function payu_ajax_update_currency_config() {
+	if ( ! isset( $_POST['payu_update_config_nonce'] ) ) {
+		wp_send_json_error( array( 'message' => __( 'Security check failed. Please try again.', 'payu-payment-links' ) ) );
+	}
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You do not have permission to do this.', 'payu-payment-links' ) ) );
+	}
+	$nonce = isset( $_POST['payu_update_config_nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['payu_update_config_nonce'] ) ) : '';
+	if ( ! wp_verify_nonce( $nonce, 'payu_update_config' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Security check failed. Please try again.', 'payu-payment-links' ) ) );
+	}
+	$validated = payu_validate_edit_config_input( $_POST );
+	if ( is_wp_error( $validated ) ) {
+		wp_send_json_error( array( 'message' => $validated->get_error_message() ) );
+	}
+	$result = payu_process_update_currency_config( $validated );
+	if ( is_wp_error( $result ) ) {
+		wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+	}
+	$base = admin_url( 'admin.php?page=wc-settings&tab=checkout&section=payu_payment_links' );
+	wp_send_json_success( array( 'redirect' => add_query_arg( 'payu_config_updated', '1', $base ) ) );
+}
+
+/**
+ * Validate edit configuration form input.
+ *
+ * @param array $post_data POST data.
+ * @return array|WP_Error Sanitized data or WP_Error.
+ */
+function payu_validate_edit_config_input( $post_data ) {
+	
+	$config_id = isset( $post_data['config_id'] ) ? absint( $post_data['config_id'] ) : 0;
+	if ( ! $config_id ) {
+		return new WP_Error( 'config_id', __( 'Invalid configuration.', 'payu-payment-links' ) );
+	}
+	$merchant_id = isset( $post_data['merchant_id'] ) ? sanitize_text_field( wp_unslash( $post_data['merchant_id'] ) ) : '';
+	if ( '' === $merchant_id || strlen( $merchant_id ) > 100 ) {
+		return new WP_Error( 'merchant_id', __( 'Merchant ID is required and must not exceed 100 characters.', 'payu-payment-links' ) );
+	}
+
+	$client_id = isset( $post_data['client_id'] ) ? sanitize_text_field( wp_unslash( $post_data['client_id'] ) ) : '';
+	if ( '' === $client_id || strlen( $client_id ) > 255 ) {
+		return new WP_Error( 'client_id', __( 'Client ID is required and must not exceed 255 characters.', 'payu-payment-links' ) );
+	}
+
+	$client_secret = isset( $post_data['payu_edit_client_secret'] ) ? sanitize_textarea_field( wp_unslash( $post_data['payu_edit_client_secret'] ) ) : '';
+	if ( '' !== $client_secret && strlen( $client_secret ) > 500 ) {
+		return new WP_Error( 'client_secret', __( 'Client Secret must not exceed 500 characters.', 'payu-payment-links' ) );
+	}
+
+	$environment   = isset( $post_data['environment'] ) ? sanitize_text_field( wp_unslash( $post_data['environment'] ) ) : 'uat';
+	if ( ! in_array( $environment, array( 'uat', 'prod' ), true ) ) {
+		$environment = 'uat';
+	}
+	return array(
+		'config_id'     => $config_id,
+		'merchant_id'   => $merchant_id,
+		'client_id'     => $client_id,
+		'client_secret' => $client_secret,
+		'environment'   => $environment,
+	);
+}
+
+/**
+ * Update currency configuration in database.
+ * Client secret is only updated if a non-empty value is provided.
+ *
+ * @param array $data Validated data (config_id, merchant_id, client_id, client_secret, environment).
+ * @return bool True on success.
+ */
+function payu_update_currency_config_in_db( $data ) {
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	$update     = array(
+		'merchant_id' => $data['merchant_id'],
+		'client_id'   => $data['client_id'],
+		'environment' => $data['environment'],
+		'updated_at'  => current_time( 'mysql' ),
+	);
+	$format = array( '%s', '%s', '%s', '%s' );
+	if ( ! empty( $data['client_secret'] ) ) {
+		$encrypted = payu_encrypt_client_secret( $data['client_secret'] );
+		if ( false !== $encrypted ) {
+			$update['client_secret'] = $encrypted;
+			$format[]                = '%s';
+		}
+	}
+	$result = $wpdb->update(
+		$table_name,
+		$update,
+		array( 'id' => $data['config_id'] ),
+		$format,
+		array( '%d' )
+	);
+	return false !== $result;
+}
 
 /**
  * Validate currency configuration input
@@ -80,6 +358,8 @@ function payu_validate_currency_config_input( $post_data ) {
 	$client_secret = isset( $post_data['payu_config_client_secret'] ) ? sanitize_textarea_field( $post_data['payu_config_client_secret'] ) : '';
 	if ( empty( $client_secret ) ) {
 		$field_errors['payu_config_client_secret'] = __( 'Client Secret is required.', 'payu-payment-links' );
+	} elseif ( strlen( $client_secret ) > 500 ) {
+		$field_errors['payu_config_client_secret'] = __( 'Client Secret must not exceed 500 characters.', 'payu-payment-links' );
 	}
 
 	$environment = isset( $post_data['payu_config_environment'] ) ? sanitize_text_field( $post_data['payu_config_environment'] ) : 'uat';
@@ -106,26 +386,28 @@ function payu_validate_currency_config_input( $post_data ) {
 
 /**
  * Check if currency + merchant_id + environment combination is unique.
+ * Used for both add (exclude_id = 0) and edit (exclude_id = config being updated).
  *
  * @param string $currency    Currency code.
  * @param string $merchant_id Merchant ID.
- * @param string $environment Environment (uat/prod).
- * @return bool True if unique, false if an identical record exists.
+ * @param string $environment Environment (uat|prod).
+ * @param int    $exclude_id  Optional. Config ID to exclude from check (for edits). Default 0 for add.
+ * @return bool True if unique, false if another record exists.
  */
-function payu_is_currency_environment_unique( $currency, $merchant_id, $environment ) {
+function payu_is_currency_environment_unique( $currency, $merchant_id, $environment, $exclude_id = 0 ) {
 	global $wpdb;
 	$table_name = $wpdb->prefix . 'payu_currency_configs';
-
-	$existing = $wpdb->get_var(
+	$exclude_id = absint( $exclude_id );
+	$count      = $wpdb->get_var(
 		$wpdb->prepare(
-			"SELECT COUNT(*) FROM {$table_name} WHERE currency = %s AND merchant_id = %s AND environment = %s AND deleted_at IS NULL",
+			"SELECT COUNT(*) FROM {$table_name} WHERE currency = %s AND merchant_id = %s AND environment = %s AND id != %d AND deleted_at IS NULL",
 			$currency,
 			$merchant_id,
-			$environment
+			$environment,
+			$exclude_id
 		)
 	);
-
-	return (int) $existing === 0;
+	return (int) $count === 0;
 }
 
 /**
@@ -319,7 +601,7 @@ function payu_decrypt_client_secret( $encrypted_secret ) {
  * @param string $environment    Environment (uat/prod).
  * @return array|WP_Error Array with 'success' => true and token data on success, WP_Error on failure.
  */
-function payu_verify_api_credentials( $merchant_id, $client_id, $client_secret, $environment ) {
+function payu_verify_api_credentials( $merchant_id, $client_id, $client_secret, $environment, $currency ) {
 	// Payment Links API uses accounts.payu.in (not api.payu.in)
 	$api_base_url = ( 'prod' === $environment ) 
 		? 'https://accounts.payu.in' 
@@ -327,11 +609,11 @@ function payu_verify_api_credentials( $merchant_id, $client_id, $client_secret, 
 
 	$auth_url = $api_base_url . '/oauth/token';
 
-		$auth_data = array(
+	$auth_data = array(
 		'grant_type'   => 'client_credentials',
 		'client_id'    => $client_id,
 		'client_secret' => $client_secret,
-		'scope'        => 'create_payment_links update_payment_links read_payment_links',
+		'scope'        => 'create_payment_links',
 	);
 
 	$request_args = array(
@@ -375,10 +657,11 @@ function payu_verify_api_credentials( $merchant_id, $client_id, $client_secret, 
 			$existing_merchant = $wpdb->get_var(
 				$wpdb->prepare(
 					"SELECT currency FROM {$table_name}
-					WHERE merchant_id = %s
+					WHERE merchant_id = %s AND currency != %s
 					AND deleted_at IS NULL
 					LIMIT 1",
-					sanitize_text_field( $merchant_id )
+					sanitize_text_field( $merchant_id ),
+					sanitize_text_field( $currency )
 				)
 			);
 
@@ -521,7 +804,8 @@ function payu_ajax_save_currency_config() {
 		$sanitized_data['merchant_id'],
 		$sanitized_data['client_id'],
 		$sanitized_data['client_secret'],
-		$sanitized_data['environment']
+		$sanitized_data['environment'],
+		$sanitized_data['currency']
 	);
 
 	if ( is_wp_error( $api_verification ) ) {

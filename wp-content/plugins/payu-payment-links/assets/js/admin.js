@@ -672,6 +672,70 @@
 		}
 	};
 
+	function validateEditMerchantId() {
+		var $field = $('#payu_edit_merchant_id');
+		var $error = $('#payu_edit_merchant_id_error');
+		var value = ($field.val() || '').trim();
+
+		$error.empty();
+		$field.removeClass('payu-field-invalid');
+
+		if (!value) {
+			$field.addClass('payu-field-invalid');
+			$error.html('<span class="payu-field-error">Merchant ID is required.</span>');
+			return false;
+		}
+
+		if (value.length > 100) {
+			$field.addClass('payu-field-invalid');
+			$error.html('<span class="payu-field-error">Max 100 characters allowed.</span>');
+			return false;
+		}
+
+		return true;
+	}
+
+	function validateEditClientId() {
+		var $field = $('#payu_edit_client_id');
+		var $error = $('#payu_edit_client_id_error');
+		var value = ($field.val() || '').trim();
+
+		$error.empty();
+		$field.removeClass('payu-field-invalid');
+
+		if (!value) {
+			$field.addClass('payu-field-invalid');
+			$error.html('<span class="payu-field-error">Client ID is required.</span>');
+			return false;
+		}
+
+		if (value.length > 255) {
+			$field.addClass('payu-field-invalid');
+			$error.html('<span class="payu-field-error">Max 255 characters allowed.</span>');
+			return false;
+		}
+
+		return true;
+	}
+
+	function validateEditClientSecret() {
+		var $field = $('#payu_edit_client_secret');
+		var $error = $('#payu_edit_client_secret_error');
+		var value = $field.val() || '';
+
+		$error.empty();
+		$field.removeClass('payu-field-invalid');
+		if (value.length === 0) {
+			return true;
+		}
+		if (value.length > 500) {
+			$field.addClass('payu-field-invalid');
+			$error.html('<span class="payu-field-error">Client Secret must not exceed 500 characters.</span>');
+			return false;
+		}
+		return true;
+	}
+
 	// Simple form validation
 	$(document).ready(function() {
 		// Initialize form toggle
@@ -901,6 +965,102 @@
 
 			return false;
 		});
+
+		// Double-submit guard: ignore second submit while AJAX is in progress
+		var payuEditFormSubmitting = false;
+
+		// Edit configuration form: always prevent default; run client-side validation first, then submit via AJAX
+		$(document).on('submit', '#payu-edit-config-form', function (e) {
+			e.preventDefault();
+			if (payuEditFormSubmitting) {
+				return false;
+			}
+			var $form = $(this);
+			var $ajaxError = $form.find('#payu-edit-ajax-error');
+			var isValid = true;
+			var firstInvalid = null;
+
+			$form.find('.payu-field-error-container').empty();
+			$form.find('.payu-field-invalid').removeClass('payu-field-invalid');
+			$ajaxError.hide().find('p').empty();
+
+			if (!validateEditMerchantId()) {
+				isValid = false;
+				firstInvalid = $('#payu_edit_merchant_id');
+			}
+			if (!validateEditClientId()) {
+				isValid = false;
+				if (!firstInvalid) firstInvalid = $('#payu_edit_client_id');
+			}
+			if (!validateEditClientSecret()) {
+				isValid = false;
+				if (!firstInvalid) firstInvalid = $('#payu_edit_client_secret');
+			}
+			if (!isValid) {
+				if (firstInvalid) firstInvalid.focus();
+				return false;
+			}
+
+			payuEditFormSubmitting = true;
+			var $btn = $form.find('button[type="submit"]');
+			var data = $form.serialize() + '&action=payu_update_currency_config';
+			$btn.prop('disabled', true);
+
+			function showUpdateError(msg) {
+				var $err = $form.find('#payu-edit-ajax-error');
+				if (!$err.length) $err = $('#payu-edit-ajax-error');
+				if (!$err.length) return;
+				$err.find('p').text(msg || 'Update failed.');
+				$err.css('display', 'block').show();
+				if ($err[0]) $err[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+			}
+
+			function resetSubmitState() {
+				payuEditFormSubmitting = false;
+				$btn.prop('disabled', false);
+			}
+
+			$.ajax({
+				url: typeof payuAjaxData !== 'undefined' ? payuAjaxData.ajaxUrl : '',
+				type: 'POST',
+				data: data,
+				dataType: 'json',
+				success: function (response) {
+					if (response && response.success && response.data && response.data.redirect) {
+						window.location.href = response.data.redirect;
+						return;
+					}
+					// WordPress wp_send_json_error returns 200 with success: false and data.message
+					var msg = (response && response.data && response.data.message) ? response.data.message : 'Update failed.';
+					showUpdateError(msg);
+					resetSubmitState();
+				},
+				error: function (xhr) {
+					var msg = 'Request failed. Please try again.';
+					if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+						msg = xhr.responseJSON.data.message;
+					} else if (xhr.responseText) {
+						try {
+							var parsed = JSON.parse(xhr.responseText);
+							if (parsed.data && parsed.data.message) msg = parsed.data.message;
+						} catch (e) {}
+					}
+					showUpdateError(msg);
+					resetSubmitState();
+				}
+			});
+			return false;
+		});
+
+		// Remove error param from URL on edit page so refresh does not show the message again
+		if ($('#payu-edit-config-form').length && window.location.search.indexOf('payu_config_error') !== -1) {
+			var url = new URL(window.location.href);
+			url.searchParams.delete('payu_config_error');
+			window.history.replaceState({}, document.title, url.toString());
+		}
 	});
+
+	
+
 
 })(jQuery);

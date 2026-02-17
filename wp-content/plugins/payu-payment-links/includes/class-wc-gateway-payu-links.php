@@ -37,9 +37,26 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 		global $hide_save_button;
 		$hide_save_button = true;
 
-		if(isset($_GET['edit_payu_config']) && !empty($_GET['edit_payu_config']))
-		{
-			$this->render_edit_configuration_form(absint($_GET['edit_payu_config']));	
+		$edit_config_id = isset( $_GET['edit_payu_config'] ) ? absint( $_GET['edit_payu_config'] ) : 0;
+
+		if ( $edit_config_id > 0 ) {
+			$config = payu_get_currency_config_by_id( $edit_config_id );
+			if ( ! $config ) {
+				$redirect = add_query_arg(
+					'payu_config_error',
+					urlencode( __( 'Configuration not found.', 'payu-payment-links' ) ),
+					admin_url( 'admin.php?page=wc-settings&tab=checkout&section=payu_payment_links' )
+				);
+				wp_safe_redirect( $redirect );
+				exit;
+			}
+			// Close WC mainform so edit form is not nested; re-open dummy form so WC's </form> has a match (avoids broken UI).
+			?>
+			</form>
+			<?php
+			$this->render_edit_configuration_form( $edit_config_id );
+			?>
+			<?php
 			return;
 		}
 
@@ -65,7 +82,6 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 					);
 					?>
 				</p>
-
 
 			<!-- Close WooCommerce form wrapper to allow our custom form -->
 			</form>
@@ -172,14 +188,8 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 		?>
 		<div class="payu-config-list" id="payu-config-list-container">
 			<div class="payu-config-list-header">
-				<h3 class="payu-config-list-title"><?php esc_html_e( 'Currency Configurations', 'payu-payment-links' ); ?></h3>
-				<div class="payu-config-list-actions">
-					<button type="button" id="payu-add-configuration-button" class="button button-primary">
-						<?php esc_html_e( 'Add Configuration', 'payu-payment-links' ); ?>
-					</button>
-				</div>
+				<h3 class="payu-config-list-title"><?php esc_html_e( 'Currency Configuration Listing', 'payu-payment-links' ); ?></h3>
 			</div>
-			
 			<div id="payu-config-list-wrapper">
 				<?php
 				// Display the table (display() automatically calls search_box and extra_tablenav internally)
@@ -214,9 +224,19 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 			<?php
 		}
 
-		// Check for error notice
+		// Check for update notice
+		if ( isset( $_GET['payu_config_updated'] ) && '1' === $_GET['payu_config_updated'] ) {
+			?>
+			<div class="notice notice-success is-dismissible">
+				<p><?php esc_html_e( 'Configuration updated successfully.', 'payu-payment-links' ); ?></p>
+			</div>
+			<?php
+		}
+
+		// Check for error notice (value may be urlencoded when passed via redirect)
 		if ( isset( $_GET['payu_config_error'] ) ) {
-			$error_message = sanitize_text_field( $_GET['payu_config_error'] );
+			$error_message = sanitize_text_field( wp_unslash( $_GET['payu_config_error'] ) );
+			$error_message = urldecode( $error_message );
 			?>
 			<div class="notice notice-error is-dismissible">
 				<p><?php echo esc_html( $error_message ); ?></p>

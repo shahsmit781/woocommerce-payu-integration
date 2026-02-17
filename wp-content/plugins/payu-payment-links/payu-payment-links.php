@@ -256,6 +256,9 @@ function payu_payment_links_load_gateway() {
 	// Register AJAX handler for AJAX form submission
 	add_action( 'wp_ajax_payu_save_currency_config', 'payu_ajax_save_currency_config' );
 
+	// Register AJAX handler for edit configuration (client-side first, then server via AJAX)
+	add_action( 'wp_ajax_payu_update_currency_config', 'payu_ajax_update_currency_config' );
+
 	// Register AJAX handler for filtering configurations
 	// Note: Function must be defined before this hook (loaded via require_once above)
 	if ( function_exists( 'payu_ajax_filter_configs' ) ) {
