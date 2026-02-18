@@ -201,6 +201,17 @@ function payu_payment_links_create_db() {
 		dbDelta( $sql );
 	}
 
+	// PayU API tokens and payment links tables
+	if ( file_exists( PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/schema-payu-api-tokens.php' ) ) {
+		require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/schema-payu-api-tokens.php';
+		if ( function_exists( 'payu_create_api_tokens_table' ) ) {
+			payu_create_api_tokens_table();
+		}
+		if ( function_exists( 'payu_create_payment_links_table' ) ) {
+			payu_create_payment_links_table();
+		}
+	}
+
 	// Log database version for future migrations
 	update_option( 'payu_payment_links_db_version', PAYU_PAYMENT_LINKS_VERSION );
 }
@@ -253,6 +264,15 @@ function payu_payment_links_load_gateway() {
 	// Load form handler (must be loaded before registering AJAX hooks)
 	require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payu-form-handler.php';
 
+	// Schema and helpers for PayU API tokens table
+	if ( file_exists( PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/schema-payu-api-tokens.php' ) ) {
+		require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/schema-payu-api-tokens.php';
+	}
+	// Token manager (DB-backed, scope-aware)
+	if ( file_exists( PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-token-manager.php' ) ) {
+		require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-token-manager.php';
+	}
+
 	// Register AJAX handler for AJAX form submission
 	add_action( 'wp_ajax_payu_save_currency_config', 'payu_ajax_save_currency_config' );
 
@@ -290,6 +310,20 @@ function payu_payment_links_load_gateway() {
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			error_log( 'PayU Payment Links: Gateway class file not found at ' . $gateway_file );
 		}
+	}
+
+	// Order admin: "Create Payment Link" meta box (links to dedicated page)
+	$order_payment_link_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-order-payment-link.php';
+	if ( file_exists( $order_payment_link_file ) && class_exists( 'WC_Order' ) ) {
+		require_once $order_payment_link_file;
+		new PayU_Order_Payment_Link();
+	}
+
+	// Dedicated admin screen: Create Payment Link form (admin.php?page=payu-create-payment-link&order_id=…)
+	$create_link_page_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-create-payment-link-page.php';
+	if ( file_exists( $create_link_page_file ) && class_exists( 'WC_Order' ) ) {
+		require_once $create_link_page_file;
+		new PayU_Create_Payment_Link_Page();
 	}
 }
 

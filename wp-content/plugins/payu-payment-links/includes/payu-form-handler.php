@@ -93,6 +93,257 @@ function payu_get_currency_config_by_id( $config_id ) {
 }
 
 /**
+ * Get active PayU config for a currency (status = active, deleted_at IS NULL).
+ *
+ * @param string $currency Currency code (e.g. INR, USD).
+ * @return object|null Config row or null if not found.
+ */
+function payu_get_active_config_by_currency( $currency ) {
+	$currency = sanitize_text_field( $currency );
+	if ( '' === $currency ) {
+		return null;
+	}
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	return $wpdb->get_row(
+		$wpdb->prepare(
+			"SELECT * FROM {$table_name} WHERE currency = %s AND status = 'active' AND deleted_at IS NULL LIMIT 1",
+			$currency
+		)
+	);
+}
+
+/**
+ * Get list of currency codes that have an active PayU configuration (for dropdowns).
+ *
+ * @return array Array of currency codes, keyed by currency code, value is display label (code + name if available).
+ */
+function payu_get_active_payu_currencies() {
+	global $wpdb;
+	$table_name  = $wpdb->prefix . 'payu_currency_configs';
+	$currencies  = get_woocommerce_currencies();
+	$rows        = $wpdb->get_col(
+		"SELECT DISTINCT currency FROM {$table_name} WHERE status = 'active' AND deleted_at IS NULL ORDER BY currency ASC"
+	);
+	$result = array();
+	foreach ( (array) $rows as $code ) {
+		$code = sanitize_text_field( $code );
+		if ( '' !== $code ) {
+			$result[ $code ] = isset( $currencies[ $code ] ) ? $code . ' – ' . $currencies[ $code ] : $code;
+		}
+	}
+	return $result;
+}
+
+/**
+ * Persist PayU payment link response in database.
+ *
+ * @param int    $order_id         WooCommerce order ID.
+ * @param string $invoice_number   PayU invoice number.
+ * @param string $payment_link_url Payment link URL.
+ * @param float  $amount           Amount.
+ * @param string $currency         Currency code.
+ * @param string $environment      uat or prod.
+ * @param string $expiry_date      Expiry datetime or empty.
+ * @param string $raw_response     JSON-encoded raw PayU response.
+ * @return int|false Insert ID or false.
+ */
+function payu_save_payment_link_response( $order_id, $invoice_number, $payment_link_url, $amount, $currency, $environment, $expiry_date, $raw_response ) {
+	global $wpdb;
+	$table = function_exists( 'payu_get_payment_links_table_name' ) ? payu_get_payment_links_table_name() : $wpdb->prefix . 'payu_payment_links';
+	$r = $wpdb->insert(
+		$table,
+		array(
+			'order_id'          => absint( $order_id ),
+			'invoice_number'    => sanitize_text_field( $invoice_number ),
+			'payment_link_url'  => esc_url_raw( $payment_link_url ),
+			'amount'            => wc_format_decimal( $amount, 4 ),
+			'currency'          => sanitize_text_field( $currency ),
+			'environment'       => sanitize_text_field( $environment ),
+			'expiry_date'       => $expiry_date ? sanitize_text_field( $expiry_date ) : null,
+			'status'            => 'active',
+			'raw_response'      => $raw_response,
+			'created_at'        => current_time( 'mysql' ),
+		),
+		array( '%d', '%s', '%s', '%f', '%s', '%s', '%s', '%s', '%s', '%s' )
+	);
+	return $r ? $wpdb->insert_id : false;
+}
+
+/**
+ * Create PayU payment link via API: validate → get token → call API → save response.
+ * Uses DB-backed token manager; on 401 invalidates token and retries once.
+ *
+ * @param WC_Order $order Order.
+ * @param array    $data  Sanitized form data (customer_name, customer_email, customer_phone, amount, currency, expiry_date, description, partial_payment, min_initial_payment, num_instalments, notify_email, notify_email_address, notify_sms, notify_sms_number).
+ * @return string|WP_Error Payment link URL on success, WP_Error on failure.
+ */
+function payu_create_payment_link_api( $order, $data ) {
+	if ( ! $order || ! is_a( $order, 'WC_Order' ) ) {
+		return new WP_Error( 'invalid_order', __( 'Invalid order.', 'payu-payment-links' ) );
+	}
+	$order_id = $order->get_id();
+	$amount   = (float) $data['amount'];
+	$order_total = (float) $order->get_total();
+	if ( $amount <= 0 ) {
+		return new WP_Error( 'invalid_amount', __( 'Payment amount must be greater than zero.', 'payu-payment-links' ) );
+	}
+	if ( $amount > $order_total ) {
+		return new WP_Error( 'invalid_amount', __( 'Payment amount must not exceed order total.', 'payu-payment-links' ) );
+	}
+	$currency = $data['currency'];
+	$config   = payu_get_active_config_by_currency( $currency );
+	if ( ! $config ) {
+		return new WP_Error( 'no_config', __( 'No active PayU configuration for the selected currency.', 'payu-payment-links' ) );
+	}
+	$client_secret = payu_decrypt_client_secret( $config->client_secret );
+	if ( false === $client_secret || '' === $client_secret ) {
+		return new WP_Error( 'decrypt_failed', __( 'Unable to use stored credentials. Please re-save the PayU configuration.', 'payu-payment-links' ) );
+	}
+	if ( ! class_exists( 'PayU_Token_Manager' ) ) {
+		return new WP_Error( 'token_manager_missing', __( 'Token manager not available.', 'payu-payment-links' ) );
+	}
+	$token = PayU_Token_Manager::get_token_for_create_payment_link( $config->merchant_id, $config->client_id, $client_secret, $config->environment );
+	if ( is_wp_error( $token ) ) {
+		return $token;
+	}
+	$environment = $config->environment;
+	
+	$api_base    = ( 'prod' === $environment ) ? 'https://oneapi.payu.in' : 'https://uatoneapi.payu.in';
+	
+	// Invoice number should be alphaNumeric
+	$invoice_num = 'WC' . $order_id . rand(1000, 9999);
+	// Ensure invoice number is exactly 16 characters.
+	if ( strlen( $invoice_num ) > 16 ) {
+		$invoice_num = substr( $invoice_num, 0, 16 );
+	}
+
+	$payload     = payu_build_create_link_payload( $order, $data, $invoice_num );
+	$response    = wp_remote_post(
+		$api_base . '/payment-links',
+		array(
+			'method'  => 'POST',
+			'timeout' => 30,
+			'headers' => array(
+				'Content-Type'  => 'application/json',
+				'Accept'        => 'application/json',
+				'Authorization' => 'Bearer ' . $token,
+				'merchantId'    => $config->merchant_id,
+			),
+			'body'    => wp_json_encode( $payload ),
+		)
+	);
+	$code = wp_remote_retrieve_response_code( $response );
+	$body = wp_remote_retrieve_body( $response );
+	$dec  = json_decode( $body, true );
+	if ( 401 === $code ) {
+		$scope   = PayU_Token_Manager::SCOPE_CREATE_PAYMENT_LINKS;
+		$scope   = function_exists( 'payu_normalize_scope_string' ) ? payu_normalize_scope_string( $scope ) : $scope;
+		$hash    = function_exists( 'payu_scope_hash' ) ? payu_scope_hash( $scope ) : hash( 'sha256', $scope );
+		$env_db  = PayU_Token_Manager::normalize_environment_for_db( $environment );
+		PayU_Token_Manager::invalidate_token( $config->merchant_id, $env_db, $hash );
+		$token = PayU_Token_Manager::get_token_for_create_payment_link( $config->merchant_id, $config->client_id, $client_secret, $config->environment );
+		if ( is_wp_error( $token ) ) {
+			return $token;
+		}
+		$response = wp_remote_post(
+			$api_base . '/payment-links',
+			array(
+				'method'  => 'POST',
+				'timeout' => 30,
+				'headers' => array(
+					'Content-Type'  => 'application/json',
+					'Accept'        => 'application/json',
+					'Authorization' => 'Bearer ' . $token,
+					'merchantId'    => $config->merchant_id,
+				),
+				'body'    => wp_json_encode( $payload ),
+			)
+		);
+		$code = wp_remote_retrieve_response_code( $response );
+		$body = wp_remote_retrieve_body( $response );
+		$dec  = json_decode( $body, true );
+	}
+
+	if ( is_wp_error( $response ) ) {
+		return $response;
+	}
+	if ( 200 !== $code && 201 !== $code ) {
+		$msg = isset( $dec['message'] ) ? $dec['message'] : ( isset( $dec['error_description'] ) ? $dec['error_description'] : __( 'PayU API error.', 'payu-payment-links' ) );
+		return new WP_Error( 'payu_api_error', $msg );
+	}
+
+	$status = isset( $dec['status'] ) ? (int) $dec['status'] : -1;
+	if ( 0 !== $status ) {
+		$msg = isset( $dec['message'] ) ? $dec['message'] : __( 'Payment link creation failed.', 'payu-payment-links' );
+		return new WP_Error( 'payu_api_error', $msg );
+	}
+	$result = isset( $dec['result'] ) ? $dec['result'] : array();
+	$link   = isset( $result['paymentLink'] ) ? $result['paymentLink'] : ( isset( $result['short_url'] ) ? $result['short_url'] : '' );
+	if ( '' === $link ) {
+		return new WP_Error( 'payu_api_error', __( 'Payment link URL not received from PayU.', 'payu-payment-links' ) );
+	}
+	$inv_num   = isset( $result['invoiceNumber'] ) ? $result['invoiceNumber'] : $invoice_num;
+	$expiry_res = isset( $result['expiryDate'] ) ? $result['expiryDate'] : $expiry_date;
+	payu_save_payment_link_response( $order_id, $inv_num, $link, $amount, $currency, $environment, $expiry_res, $body );
+	return $link;
+}
+
+/**
+ * Build request payload for PayU Create Payment Link API.
+ *
+ * @param WC_Order $order      Order.
+ * @param array    $data       Form data.
+ * @param string   $invoice_number Invoice number to use.
+ * @return array Payload for JSON body.
+ */
+function payu_build_create_link_payload( $order, $data, $invoice_number ) {
+	$amount       = (float) $data['amount'];
+	$partial      = ! empty( $data['partial_payment'] );
+	$sub_amount   = (int) round( $amount);
+	if ( $sub_amount < 1 ) {
+		$sub_amount = 1;
+	}
+	
+
+	$payload = array(
+		'invoiceNumber'           => $invoice_number,
+		'subAmount'               => $sub_amount,
+		'currency'                => $data['currency'],
+		'description'             => '' !== $data['description'] ? $data['description'] : sprintf( __( 'Order #%s', 'payu-payment-links' ), $order->get_id() ),
+		'source'                  => 'API',
+		'isPartialPaymentAllowed' => $partial,
+		'customer'                => array(
+			'name'  => '' !== $data['customer_name'] ? $data['customer_name'] : ( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ),
+			'email' => ! empty( $data['notify_email'] ) && '' !== $data['customer_email'] ? $data['customer_email'] : '',
+			'phone' => '' !== $data['customer_phone'] ? $data['customer_phone'] : $order->get_billing_phone(),
+		),
+		'viaEmail'                => ! empty( $data['notify_email'] ),
+		'viaSms'                  => ! empty( $data['notify_sms'] ),
+		'udf'                     => array(
+			'udf1' => (string) $order->get_id(),
+			'udf5' => 'WooCommerce_paymentlink',
+		),
+		'successURL'              => $order->get_checkout_order_received_url(),
+		'failureURL'              => wc_get_page_permalink( 'checkout' ) ? wc_get_page_permalink( 'checkout' ) : $order->get_checkout_order_received_url(),
+	);
+	if ( '' !== $data['expiry_date'] ) {
+		$ts = strtotime( $data['expiry_date'] );
+		$payload['expiryDate'] = gmdate( 'Y-m-d H:i:s', $ts );
+	}
+	if ( ! $partial ) {
+		$payload['transactionId'] = $invoice_number;
+	}
+	if ( $partial && (float) $data['min_initial_payment'] > 0 ) {
+		$payload['minAmountForCustomer'] = (int) round( (float) $data['min_initial_payment']);
+	}
+	if ( $partial && (int) $data['num_instalments'] > 0 ) {
+		$payload['maxPaymentsAllowed'] = (int) $data['num_instalments'];
+	}
+	return $payload;
+}
+
+/**
  * Handle update configuration request (POST + nonce).
  * Validates input, checks uniqueness, updates DB, redirects with success/error.
  *

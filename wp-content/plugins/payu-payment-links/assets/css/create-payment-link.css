@@ -1,0 +1,43 @@
+/**
+ * PayU Create Payment Link – Admin form styles
+ * Complements WooCommerce admin styles; no inline CSS.
+ *
+ * @package PayU_Payment_Links
+ */
+
+.payu-create-payment-link-wrap .payu-form-panel {
+	margin-top: 1.5em;
+	margin-bottom: 1.5em;
+}
+
+.payu-create-payment-link-wrap .payu-form-section-title {
+	margin: 0 0 0.5em 0;
+	padding: 0 0 0.25em 0;
+	font-size: 1.1em;
+	border-bottom: 1px solid #c3c4c7;
+}
+
+.payu-create-payment-link-wrap .form-table th {
+	padding: 20px 10px 20px 0;
+	width: 200px;
+}
+
+.payu-create-payment-link-wrap .form-table td {
+	padding: 15px 10px;
+}
+
+.payu-create-payment-link-wrap .submit {
+	margin-top: 1.5em;
+	padding-top: 1em;
+	border-top: 1px solid #c3c4c7;
+}
+
+.payu-create-payment-link-wrap .required {
+	color: #d63638;
+}
+
+.payu-create-payment-link-wrap input[readonly][disabled] {
+	background: #f0f0f1;
+	color: #2c3338;
+	cursor: not-allowed;
+}
