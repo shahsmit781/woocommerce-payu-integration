@@ -164,7 +164,7 @@ class PayU_Config_List_Table extends WP_List_Table {
 		$sortable              = $this->get_sortable_columns();
 		$this->_column_headers = array( $columns, $hidden, $sortable );
 
-		$table_name = $wpdb->prefix . 'payu_currency_configs';
+		$table_name = payu_get_currency_configs_table_name();
 
 		// Check if table exists
 		$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );

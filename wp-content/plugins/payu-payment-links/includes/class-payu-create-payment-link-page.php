@@ -270,14 +270,33 @@ class PayU_Create_Payment_Link_Page {
 			PAYU_PAYMENT_LINKS_VERSION,
 			true
 		);
+		$order_id = isset( $_GET['order_id'] ) ? absint( $_GET['order_id'] ) : 0;
+		$order_total = 0;
+		$allowed_currencies = array();
+		if ( $order_id ) {
+			$order = wc_get_order( $order_id );
+			if ( $order && $order->get_id() ) {
+				$order_total = (float) $order->get_total();
+				$allowed_currencies = function_exists( 'payu_get_active_payu_currencies' ) ? array_keys( payu_get_active_payu_currencies() ) : array();
+			}
+		}
 		wp_localize_script(
 			'payu-create-payment-link',
 			'payuCreatePaymentLink',
 			array(
-				'i18n' => array(
-					'emailRequired'  => __( 'Please enter an email address when Email is selected.', 'payu-payment-links' ),
-					'smsRequired'    => __( 'Please enter a mobile number when SMS is selected.', 'payu-payment-links' ),
-					'minAmountError' => __( 'Minimum initial payment cannot be more than the payment amount.', 'payu-payment-links' ),
+				'orderTotal'        => $order_total,
+				'allowedCurrencies' => $allowed_currencies,
+				'i18n'              => array(
+					'amountGreaterThanZero'   => __( 'Payment amount must be greater than zero.', 'payu-payment-links' ),
+					'amountExceedOrderTotal'  => __( 'Payment amount must not exceed order total.', 'payu-payment-links' ),
+					'expiryMustBeFuture'      => __( 'Expiry date must be in the future.', 'payu-payment-links' ),
+					'selectValidCurrency'     => __( 'Please select a valid currency from PayU configurations.', 'payu-payment-links' ),
+					'customerEmailRequired'   => __( 'A valid customer email is required.', 'payu-payment-links' ),
+					'emailRequired'           => __( 'Please enter an email address when Email is selected.', 'payu-payment-links' ),
+					'smsRequired'             => __( 'Please enter a mobile number when SMS is selected.', 'payu-payment-links' ),
+					'minInitialRequired'     => __( 'Minimum initial payment is required when partial payment is enabled.', 'payu-payment-links' ),
+					'numInstalmentsRequired'  => __( 'Number of instalments is required when partial payment is enabled.', 'payu-payment-links' ),
+					'minAmountError'          => __( 'Minimum initial payment cannot be more than the payment amount.', 'payu-payment-links' ),
 				),
 			)
 		);

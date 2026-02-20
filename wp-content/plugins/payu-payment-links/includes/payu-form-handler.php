@@ -31,7 +31,7 @@ function payu_handle_delete_config() {
 	}
 
 	global $wpdb;
-	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	$table_name = payu_get_currency_configs_table_name();
 	$updated   = $wpdb->update(
 		$table_name,
 		array( 'deleted_at' => current_time( 'mysql' ) ),
@@ -60,7 +60,7 @@ function payu_soft_delete_currency_config( $config_id ) {
 		return false;
 	}
 	global $wpdb;
-	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	$table_name = payu_get_currency_configs_table_name();
 	$result     = $wpdb->update(
 		$table_name,
 		array( 'deleted_at' => current_time( 'mysql' ) ),
@@ -83,7 +83,7 @@ function payu_get_currency_config_by_id( $config_id ) {
 		return null;
 	}
 	global $wpdb;
-	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	$table_name = payu_get_currency_configs_table_name();
 	return $wpdb->get_row(
 		$wpdb->prepare(
 			"SELECT * FROM {$table_name} WHERE id = %d AND deleted_at IS NULL",
@@ -104,12 +104,25 @@ function payu_get_active_config_by_currency( $currency ) {
 		return null;
 	}
 	global $wpdb;
-	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	$table_name = payu_get_currency_configs_table_name();
 	return $wpdb->get_row(
 		$wpdb->prepare(
 			"SELECT * FROM {$table_name} WHERE currency = %s AND status = 'active' AND deleted_at IS NULL LIMIT 1",
 			$currency
 		)
+	);
+}
+
+/**
+ * Get first active PayU config (any currency). Used as fallback when payment link row has no config_id/currency.
+ *
+ * @return object|null Config row or null.
+ */
+function payu_get_first_active_config() {
+	global $wpdb;
+	$table_name = payu_get_currency_configs_table_name();
+	return $wpdb->get_row(
+		"SELECT * FROM {$table_name} WHERE status = 'active' AND deleted_at IS NULL ORDER BY id ASC LIMIT 1"
 	);
 }
 
@@ -120,7 +133,7 @@ function payu_get_active_config_by_currency( $currency ) {
  */
 function payu_get_active_payu_currencies() {
 	global $wpdb;
-	$table_name  = $wpdb->prefix . 'payu_currency_configs';
+	$table_name  = payu_get_currency_configs_table_name();
 	$currencies  = get_woocommerce_currencies();
 	$rows        = $wpdb->get_col(
 		"SELECT DISTINCT currency FROM {$table_name} WHERE status = 'active' AND deleted_at IS NULL ORDER BY currency ASC"
@@ -136,37 +149,56 @@ function payu_get_active_payu_currencies() {
 }
 
 /**
- * Persist PayU payment link response in database.
+ * Persist PayU payment link response in database (wp_payu_payment_links).
  *
- * @param int    $order_id         WooCommerce order ID.
- * @param string $invoice_number   PayU invoice number.
- * @param string $payment_link_url Payment link URL.
- * @param float  $amount           Amount.
+ * @param int    $order_id          WooCommerce order ID.
+ * @param string $payu_invoice_number PayU invoice number.
+ * @param string $payment_link_url  Payment link URL (stored in varchar(500)).
+ * @param float  $amount            Link amount.
  * @param string $currency         Currency code.
  * @param string $environment      uat or prod.
  * @param string $expiry_date      Expiry datetime or empty.
- * @param string $raw_response     JSON-encoded raw PayU response.
+ * @param array  $extra            Optional: config_id, mid, env, isPartialPaymentAllowed, min_initial_payment, max_instalments, customerName, customerPhone, customerEmail, emailStatus, smsStatus, udf1, udf5.
  * @return int|false Insert ID or false.
  */
-function payu_save_payment_link_response( $order_id, $invoice_number, $payment_link_url, $amount, $currency, $environment, $expiry_date, $raw_response ) {
+function payu_save_payment_link_response( $order_id, $payu_invoice_number, $payment_link_url, $amount, $currency, $environment, $expiry_date, $extra = array() ) {
 	global $wpdb;
-	$table = function_exists( 'payu_get_payment_links_table_name' ) ? payu_get_payment_links_table_name() : $wpdb->prefix . 'payu_payment_links';
-	$r = $wpdb->insert(
-		$table,
-		array(
-			'order_id'          => absint( $order_id ),
-			'invoice_number'    => sanitize_text_field( $invoice_number ),
-			'payment_link_url'  => esc_url_raw( $payment_link_url ),
-			'amount'            => wc_format_decimal( $amount, 4 ),
-			'currency'          => sanitize_text_field( $currency ),
-			'environment'       => sanitize_text_field( $environment ),
-			'expiry_date'       => $expiry_date ? sanitize_text_field( $expiry_date ) : null,
-			'status'            => 'active',
-			'raw_response'      => $raw_response,
-			'created_at'        => current_time( 'mysql' ),
-		),
-		array( '%d', '%s', '%s', '%f', '%s', '%s', '%s', '%s', '%s', '%s' )
+	$table  = function_exists( 'payu_get_payment_links_table_name' ) ? payu_get_payment_links_table_name() : $wpdb->prefix . 'payu_payment_links';
+	$amount = (float) $amount;
+	$url    = esc_url_raw( $payment_link_url );
+	if ( strlen( $url ) > 255 ) {
+		$url = substr( $url, 0, 255 );
+	}
+	$row = array(
+		'order_id'                  => absint( $order_id ),
+		'payu_invoice_number'       => sanitize_text_field( $payu_invoice_number ),
+		'payment_link_url'          => $url,
+		'amount'                    => $amount,
+		'currency'                  => sanitize_text_field( $currency ),
+		'paid_amount'               => 0,
+		'remaining_amount'          => $amount,
+		'status'                    => 'pending',
+		'expiry_date'               => $expiry_date ? sanitize_text_field( $expiry_date ) : null,
+		'environment'               => sanitize_text_field( $environment ),
+		'isPartialPaymentAllowed'   => isset( $extra['isPartialPaymentAllowed'] ) ? (int) (bool) $extra['isPartialPaymentAllowed'] : 0,
+		'min_initial_payment'       => isset( $extra['min_initial_payment'] ) ? wc_format_decimal( $extra['min_initial_payment'], 2 ) : null,
+		'max_instalments'           => isset( $extra['max_instalments'] ) ? absint( $extra['max_instalments'] ) : null,
+		'mid'                       => isset( $extra['mid'] ) ? sanitize_text_field( $extra['mid'] ) : null,
+		'customerName'              => isset( $extra['customerName'] ) ? sanitize_text_field( $extra['customerName'] ) : null,
+		'customerPhone'             => isset( $extra['customerPhone'] ) ? sanitize_text_field( $extra['customerPhone'] ) : null,
+		'customerEmail'             => isset( $extra['customerEmail'] ) ? sanitize_email( $extra['customerEmail'] ) : null,
+		'is_email_sent'              => isset( $extra['is_email_sent'] ) ? (int) (bool) $extra['is_email_sent'] : 0,
+		'is_sms_sent'                => isset( $extra['is_sms_sent'] ) ? (int) (bool) $extra['is_sms_sent'] : 0,
+		'emailStatus'               => isset( $extra['emailStatus'] ) ? sanitize_textarea_field( $extra['emailStatus'] ) : null,
+		'smsStatus'                 => isset( $extra['smsStatus'] ) ? sanitize_textarea_field( $extra['smsStatus'] ) : null,
+		'udf1'                      => isset( $extra['udf1'] ) ? sanitize_text_field( $extra['udf1'] ) : (string) $order_id,
+		'udf5'                      => ( isset( $extra['udf5'] ) && '' !== trim( (string) $extra['udf5'] ) ) ? sanitize_text_field( $extra['udf5'] ) : 'WooCommerce_paymentlink',
+		'config_id'                 => isset( $extra['config_id'] ) ? absint( $extra['config_id'] ) : null,
 	);
+
+	$formats = array( '%d', '%s', '%s', '%f', '%s', '%f', '%f', '%s', '%s', '%s', '%d', '%f', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%d' );
+
+	$r = $wpdb->insert( $table, $row, $formats );
 	return $r ? $wpdb->insert_id : false;
 }
 
@@ -212,7 +244,7 @@ function payu_create_payment_link_api( $order, $data ) {
 	$api_base    = ( 'prod' === $environment ) ? 'https://oneapi.payu.in' : 'https://uatoneapi.payu.in';
 	
 	// Invoice number should be alphaNumeric
-	$invoice_num = 'WC' . $order_id . rand(1000, 9999);
+	$invoice_num = 'WC' . $order_id . rand( 1000, 9999 );
 	// Ensure invoice number is exactly 16 characters.
 	if ( strlen( $invoice_num ) > 16 ) {
 		$invoice_num = substr( $invoice_num, 0, 16 );
@@ -283,9 +315,27 @@ function payu_create_payment_link_api( $order, $data ) {
 	if ( '' === $link ) {
 		return new WP_Error( 'payu_api_error', __( 'Payment link URL not received from PayU.', 'payu-payment-links' ) );
 	}
-	$inv_num   = isset( $result['invoiceNumber'] ) ? $result['invoiceNumber'] : $invoice_num;
-	$expiry_res = isset( $result['expiryDate'] ) ? $result['expiryDate'] : $expiry_date;
-	payu_save_payment_link_response( $order_id, $inv_num, $link, $amount, $currency, $environment, $expiry_res, $body );
+	$inv_num    = isset( $result['invoiceNumber'] ) ? $result['invoiceNumber'] : $invoice_num;
+	$expiry_res = isset( $result['expiryDate'] ) ? sanitize_text_field( $result['expiryDate'] ) : ( isset( $data['expiry_date'] ) ? sanitize_text_field( $data['expiry_date'] ) : null );
+
+	$extra = array(
+		'config_id'                => isset( $config->id ) ? $config->id : null,
+		'isPartialPaymentAllowed' => isset( $result['isPartialPaymentAllowed'] ) ? (bool) $result['isPartialPaymentAllowed'] : ! empty( $data['partial_payment'] ),
+		'min_initial_payment'      => ! empty( $data['min_initial_payment'] ) ? $data['min_initial_payment'] : null,
+		'max_instalments'          => ! empty( $data['num_instalments'] ) ? (int) $data['num_instalments'] : null,
+		'mid'                      => isset( $config->merchant_id ) ? $config->merchant_id : null,
+		'customerName'             => isset( $data['customer_name'] ) ? sanitize_text_field( $data['customer_name'] ) : null,
+		'customerPhone'            => isset( $data['customer_phone'] ) ? sanitize_text_field( $data['customer_phone'] ) : null,
+		'customerEmail'             => ! empty( $data['customer_email'] ) ? sanitize_email( $data['customer_email'] ) : null,
+		'is_email_sent'              => ! empty( $data['notify_email'] ) && ! empty( $data['customer_email'] ) ? 1 : 0,
+		'is_sms_sent'                => ! empty( $data['notify_sms'] ) && ! empty( $data['customer_phone'] ) ? 1 : 0,
+		'emailStatus'              => ! empty($result['emailStatus']) ? sanitize_textarea_field( $result['emailStatus'] ) : null,
+		'smsStatus'                => ! empty($result['smsStatus']) ? sanitize_textarea_field( $result['smsStatus'] ) : null,
+		'udf1'                     => (string) $order_id,
+		'udf5'                     => 'WooCommerce_paymentlink',
+	);
+
+	payu_save_payment_link_response( $order_id, $inv_num, $link, $amount, $currency, $environment, $expiry_res, $extra );
 	return $link;
 }
 
@@ -304,7 +354,6 @@ function payu_build_create_link_payload( $order, $data, $invoice_number ) {
 	if ( $sub_amount < 1 ) {
 		$sub_amount = 1;
 	}
-	
 
 	$payload = array(
 		'invoiceNumber'           => $invoice_number,
@@ -324,8 +373,8 @@ function payu_build_create_link_payload( $order, $data, $invoice_number ) {
 			'udf1' => (string) $order->get_id(),
 			'udf5' => 'WooCommerce_paymentlink',
 		),
-		'successURL'              => $order->get_checkout_order_received_url(),
-		'failureURL'              => wc_get_page_permalink( 'checkout' ) ? wc_get_page_permalink( 'checkout' ) : $order->get_checkout_order_received_url(),
+		'successURL'              => class_exists( 'PayU_Payment_Link_Status_Page' ) ? PayU_Payment_Link_Status_Page::get_status_url( $invoice_number ) : $order->get_checkout_order_received_url(),
+		'failureURL'              => class_exists( 'PayU_Payment_Link_Status_Page' ) ? PayU_Payment_Link_Status_Page::get_status_url( $invoice_number ) : ( wc_get_page_permalink( 'checkout' ) ? wc_get_page_permalink( 'checkout' ) : $order->get_checkout_order_received_url() ),
 	);
 	if ( '' !== $data['expiry_date'] ) {
 		$ts = strtotime( $data['expiry_date'] );
@@ -551,7 +600,7 @@ function payu_validate_edit_config_input( $post_data ) {
  */
 function payu_update_currency_config_in_db( $data ) {
 	global $wpdb;
-	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	$table_name = payu_get_currency_configs_table_name();
 	$update     = array(
 		'merchant_id' => $data['merchant_id'],
 		'client_id'   => $data['client_id'],
@@ -647,7 +696,7 @@ function payu_validate_currency_config_input( $post_data ) {
  */
 function payu_is_currency_environment_unique( $currency, $merchant_id, $environment, $exclude_id = 0 ) {
 	global $wpdb;
-	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	$table_name = payu_get_currency_configs_table_name();
 	$exclude_id = absint( $exclude_id );
 	$count      = $wpdb->get_var(
 		$wpdb->prepare(
@@ -670,7 +719,7 @@ function payu_is_currency_environment_unique( $currency, $merchant_id, $environm
 function payu_save_currency_config_to_db( $data ) {
 	global $wpdb;
 
-	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	$table_name = payu_get_currency_configs_table_name();
 
 	// Ensure table exists
 	$table_exists = $wpdb->get_var(
@@ -903,7 +952,7 @@ function payu_verify_api_credentials( $merchant_id, $client_id, $client_secret, 
 			}
 
 			global $wpdb;
-			$table_name = $wpdb->prefix . 'payu_currency_configs';
+			$table_name = payu_get_currency_configs_table_name();
 
 			$existing_merchant = $wpdb->get_var(
 				$wpdb->prepare(
@@ -1212,7 +1261,7 @@ function payu_ajax_toggle_status() {
 	}
 
 	global $wpdb;
-	$table_name = $wpdb->prefix . 'payu_currency_configs';
+	$table_name = payu_get_currency_configs_table_name();
 
 	// 3. Single read: current row + (when activating) whether another config for same currency is active
 	$row = $wpdb->get_row(

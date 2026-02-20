@@ -1,15 +1,60 @@
 <?php
 /**
- * PayU API Tokens – Database Schema
+ * PayU Database Schema – All plugin tables in one place
  *
- * Production-ready schema for persisting PayU access tokens with scope awareness,
- * lifecycle tracking, and concurrency safety. Tokens are stored in a dedicated table
- * (not options, order meta, or user meta) for multi-admin, multi-currency safety.
+ * Defines: wp_payu_currency_configs, wp_payu_api_tokens, wp_payu_payment_links, wp_payu_payment_transactions.
+ * Use dbDelta on activation or when DB version is behind.
  *
  * @package PayU_Payment_Links
  */
 
 defined( 'ABSPATH' ) || exit;
+
+/**
+ * Return the table name for PayU currency configs (with current prefix).
+ *
+ * @return string
+ */
+function payu_get_currency_configs_table_name() {
+	global $wpdb;
+	return $wpdb->prefix . 'payu_currency_configs';
+}
+
+/**
+ * Get the SQL definition for the PayU currency configs table.
+ * dbDelta-compatible.
+ *
+ * @return string Full CREATE TABLE statement (no charset; caller appends).
+ */
+function payu_get_currency_configs_schema_sql() {
+	$table_name = payu_get_currency_configs_table_name();
+	return "CREATE TABLE $table_name (
+	id bigint(20) NOT NULL AUTO_INCREMENT,
+	currency varchar(10) NOT NULL,
+	merchant_id varchar(100) NOT NULL,
+	client_id varchar(255) NOT NULL,
+	client_secret text NOT NULL,
+	environment enum('uat','prod') DEFAULT 'uat',
+	status enum('active','invalid','inactive') DEFAULT 'active',
+	deleted_at datetime DEFAULT NULL,
+	created_at datetime DEFAULT CURRENT_TIMESTAMP,
+	updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	PRIMARY KEY  (id)
+)";
+}
+
+/**
+ * Create or update the PayU currency configs table (dbDelta).
+ *
+ * @return void
+ */
+function payu_create_currency_configs_table() {
+	global $wpdb;
+	$charset_collate = $wpdb->get_charset_collate();
+	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+	$sql = payu_get_currency_configs_schema_sql() . " $charset_collate;";
+	dbDelta( $sql );
+}
 
 /**
  * Normalize a scope string: sort space-separated scopes alphabetically.
@@ -104,6 +149,7 @@ function payu_get_payment_links_table_name() {
 
 /**
  * Get the SQL definition for the PayU payment links table.
+ * dbDelta-compatible (two spaces before PRIMARY KEY, etc.).
  *
  * @return string Full CREATE TABLE statement (no charset; caller appends).
  */
@@ -112,18 +158,44 @@ function payu_get_payment_links_schema_sql() {
 	return "CREATE TABLE $table_name (
 	id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 	order_id bigint(20) unsigned NOT NULL,
-	invoice_number varchar(100) NOT NULL,
-	payment_link_url text NOT NULL,
-	amount decimal(18,4) NOT NULL,
+	config_id bigint(20) unsigned DEFAULT NULL,
+	payu_invoice_number varchar(100) NOT NULL,
+	payment_link_url varchar(255) NOT NULL,
 	currency varchar(10) NOT NULL,
-	environment varchar(20) NOT NULL,
+	amount decimal(18,2) NOT NULL DEFAULT 0.00,
+	paid_amount decimal(18,2) NOT NULL DEFAULT 0.00,
+	remaining_amount decimal(18,2) NOT NULL DEFAULT 0.00,
+	status varchar(20) NOT NULL DEFAULT 'pending',
 	expiry_date datetime DEFAULT NULL,
-	status varchar(20) NOT NULL DEFAULT 'active',
-	raw_response longtext DEFAULT NULL,
+	isPartialPaymentAllowed tinyint(1) NOT NULL DEFAULT 0,
+	min_initial_payment decimal(18,2) DEFAULT NULL,
+	max_instalments int(11) DEFAULT NULL,
+	utr_number varchar(100) DEFAULT NULL,
+	mid varchar(100) DEFAULT NULL,
+	environment varchar(20) NOT NULL DEFAULT 'uat',
+	customerName varchar(255) DEFAULT NULL,
+	customerPhone varchar(50) DEFAULT NULL,
+	customerEmail varchar(255) DEFAULT NULL,
+	is_email_sent tinyint(1) NOT NULL DEFAULT 0,
+	is_sms_sent tinyint(1) NOT NULL DEFAULT 0,
+	emailStatus text DEFAULT NULL,
+	smsStatus text DEFAULT NULL,
+	udf1 varchar(100) DEFAULT NULL,
+	udf5 varchar(50) DEFAULT NULL,
+	transaction_summary text DEFAULT NULL,
+	payu_api_response_json longtext DEFAULT NULL,
 	created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	is_deleted tinyint(1) NOT NULL DEFAULT 0,
 	PRIMARY KEY  (id),
-	KEY ix_order_id (order_id),
-	KEY ix_invoice_number (invoice_number)
+	UNIQUE KEY payu_invoice_number (payu_invoice_number),
+	KEY order_id (order_id),
+	KEY status (status),
+	KEY currency (currency),
+	KEY environment (environment),
+	KEY created_at (created_at),
+	KEY config_id (config_id),
+	KEY utr_number (utr_number)
 )";
 }
 
@@ -137,5 +209,52 @@ function payu_create_payment_links_table() {
 	$charset_collate = $wpdb->get_charset_collate();
 	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 	$sql = payu_get_payment_links_schema_sql() . " $charset_collate;";
+	dbDelta( $sql );
+}
+
+/**
+ * Return the table name for PayU payment transactions (with current prefix).
+ *
+ * @return string
+ */
+function payu_get_payment_transactions_table_name() {
+	global $wpdb;
+	return $wpdb->prefix . 'payu_payment_transactions';
+}
+
+/**
+ * Get the SQL definition for the PayU payment transactions table.
+ * dbDelta-compatible.
+ *
+ * @return string Full CREATE TABLE statement (no charset; caller appends).
+ */
+function payu_get_payment_transactions_schema_sql() {
+	$table_name = payu_get_payment_transactions_table_name();
+	return "CREATE TABLE $table_name (
+	id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+	payment_link_id bigint(20) unsigned NOT NULL,
+	transaction_id varchar(100) DEFAULT NULL,
+	amount decimal(18,2) NOT NULL DEFAULT 0.00,
+	payment_mode varchar(50) DEFAULT NULL,
+	bank_reference varchar(100) DEFAULT NULL,
+	status varchar(20) NOT NULL DEFAULT 'pending',
+	created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY  (id),
+	KEY payment_link_id (payment_link_id),
+	KEY transaction_id (transaction_id),
+	KEY status (status)
+)";
+}
+
+/**
+ * Create or update the PayU payment transactions table (dbDelta).
+ *
+ * @return void
+ */
+function payu_create_payment_transactions_table() {
+	global $wpdb;
+	$charset_collate = $wpdb->get_charset_collate();
+	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+	$sql = payu_get_payment_transactions_schema_sql() . " $charset_collate;";
 	dbDelta( $sql );
 }

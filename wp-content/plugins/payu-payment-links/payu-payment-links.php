@@ -144,76 +144,36 @@ function payu_payment_links_woocommerce_version_notice() {
 }
 
 /**
- * Create database table for storing PayU currency configurations
- * This table stores merchant credentials per currency for multi-currency support
+ * Load schema file and create/update wp_payu_api_tokens, wp_payu_payment_links, wp_payu_payment_transactions.
+ * Safe to call on every activation or when DB version is behind.
+ *
+ * @return void
+ */
+function payu_payment_links_run_table_schema() {
+	$schema_file = dirname( PAYU_PAYMENT_LINKS_PLUGIN_FILE ) . '/includes/schema-payu-api-tokens.php';
+	if ( ! is_readable( $schema_file ) ) {
+		$schema_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/schema-payu-api-tokens.php';
+	}
+	require_once $schema_file;
+	payu_create_currency_configs_table();
+	payu_create_api_tokens_table();
+	payu_create_payment_links_table();
+	payu_create_payment_transactions_table();
+}
+
+/**
+ * Run on plugin activation: create/update all tables from schema, set DB version, flush rewrites.
  *
  * @return void
  */
 function payu_payment_links_create_db() {
-	global $wpdb;
-
-	$table_name = $wpdb->prefix . 'payu_currency_configs';
-
-	$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
-
-	if ( $table_exists ) {
-		// Table exists, use dbDelta to update if needed
-		$charset_collate = $wpdb->get_charset_collate();
-
-		/**
-		 * dbDelta is very picky about SQL formatting:
-		 */
-		$sql = "CREATE TABLE $table_name (
-			id bigint(20) NOT NULL AUTO_INCREMENT,
-			currency varchar(10) NOT NULL,
-			merchant_id varchar(100) NOT NULL,
-			client_id varchar(255) NOT NULL,
-			client_secret text NOT NULL,
-			environment enum('uat','prod') DEFAULT 'uat',
-			status enum('active','invalid','inactive') DEFAULT 'active',
-			deleted_at datetime DEFAULT NULL,
-			created_at datetime DEFAULT CURRENT_TIMESTAMP,
-			updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			PRIMARY KEY  (id)
-		) $charset_collate;";
-
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		dbDelta( $sql );
-	} else {
-		// Table doesn't exist, create it
-		$charset_collate = $wpdb->get_charset_collate();
-
-		$sql = "CREATE TABLE $table_name (
-			id bigint(20) NOT NULL AUTO_INCREMENT,
-			currency varchar(10) NOT NULL,
-			merchant_id varchar(100) NOT NULL,
-			client_id varchar(255) NOT NULL,
-			client_secret text NOT NULL,
-			environment enum('uat','prod') DEFAULT 'uat',
-			status enum('active','invalid','inactive') DEFAULT 'active',
-			deleted_at datetime DEFAULT NULL,
-			created_at datetime DEFAULT CURRENT_TIMESTAMP,
-			updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			PRIMARY KEY  (id)
-		) $charset_collate;";
-
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		dbDelta( $sql );
-	}
-
-	// PayU API tokens and payment links tables
-	if ( file_exists( PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/schema-payu-api-tokens.php' ) ) {
-		require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/schema-payu-api-tokens.php';
-		if ( function_exists( 'payu_create_api_tokens_table' ) ) {
-			payu_create_api_tokens_table();
-		}
-		if ( function_exists( 'payu_create_payment_links_table' ) ) {
-			payu_create_payment_links_table();
-		}
-	}
-
-	// Log database version for future migrations
+	payu_payment_links_run_table_schema();
 	update_option( 'payu_payment_links_db_version', PAYU_PAYMENT_LINKS_VERSION );
+	if ( file_exists( PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-payment-link-status-page.php' ) ) {
+		require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-payment-link-status-page.php';
+		PayU_Payment_Link_Status_Page::register_rewrite_rule_for_activation();
+		flush_rewrite_rules( true );
+	}
 }
 
 /**
@@ -362,6 +322,40 @@ add_action( 'before_woocommerce_init', 'payu_payment_links_declare_hpos_compatib
 
 // Load text domain
 add_action( 'plugins_loaded', 'payu_payment_links_load_textdomain' );
+
+// Ensure PayU tables exist/are updated when DB version is behind (e.g. reactivation didn't run)
+add_action( 'plugins_loaded', 'payu_payment_links_maybe_upgrade_db', 1 );
+
+/**
+ * If stored DB version is older than plugin version (or missing), run table schema and update option.
+ * Ensures tables are created/updated even when activation hook doesn't run (e.g. bulk activate).
+ */
+function payu_payment_links_maybe_upgrade_db() {
+	$saved = get_option( 'payu_payment_links_db_version', '' );
+	if ( $saved === PAYU_PAYMENT_LINKS_VERSION ) {
+		return;
+	}
+	payu_payment_links_run_table_schema();
+	update_option( 'payu_payment_links_db_version', PAYU_PAYMENT_LINKS_VERSION );
+}
+
+// Payment Link Status page (public /payment-link/status) – load early so rewrite and URL helper are available
+add_action( 'plugins_loaded', 'payu_payment_links_load_status_page', 5 );
+
+/**
+ * Load the Payment Link Status page class (rewrite rule + template).
+ */
+function payu_payment_links_load_status_page() {
+	$file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-payment-link-status-page.php';
+	if ( file_exists( $file ) ) {
+		require_once $file;
+		new PayU_Payment_Link_Status_Page();
+	}
+	$ajax_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-payment-link-status-ajax.php';
+	if ( file_exists( $ajax_file ) ) {
+		require_once $ajax_file;
+	}
+}
 
 // Initialize the gateway after all plugins are loaded
 // Priority 99 ensures WooCommerce is fully loaded before we initialize

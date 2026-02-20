@@ -16,6 +16,7 @@ defined( 'ABSPATH' ) || exit;
 class PayU_Token_Manager {
 
 	const SCOPE_CREATE_PAYMENT_LINKS = 'create_payment_links';
+	const SCOPE_READ_PAYMENT_LINKS   = 'read_payment_links';
 	const BUFFER_SECONDS             = 60;
 
 	/**
@@ -41,6 +42,33 @@ class PayU_Token_Manager {
 	 */
 	public static function get_token_for_create_payment_link( $merchant_id, $client_id, $client_secret, $environment ) {
 		$scope   = self::SCOPE_CREATE_PAYMENT_LINKS;
+		$scope   = function_exists( 'payu_normalize_scope_string' ) ? payu_normalize_scope_string( $scope ) : $scope;
+		$hash    = function_exists( 'payu_scope_hash' ) ? payu_scope_hash( $scope ) : hash( 'sha256', $scope );
+		$env_db  = self::normalize_environment_for_db( $environment );
+
+		$existing = self::get_valid_token_from_db( $merchant_id, $env_db, $hash );
+		if ( is_string( $existing ) && '' !== $existing ) {
+			return $existing;
+		}
+
+		$result = self::fetch_and_store_token( $merchant_id, $client_id, $client_secret, $environment, $scope, $hash );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return isset( $result['access_token'] ) ? $result['access_token'] : new WP_Error( 'no_token', __( 'No access token received.', 'payu-payment-links' ) );
+	}
+
+	/**
+	 * Get PayU access token for read_payment_links scope.
+	 *
+	 * @param string $merchant_id   PayU Merchant ID.
+	 * @param string $client_id     Client ID.
+	 * @param string $client_secret Client Secret (plain).
+	 * @param string $environment   uat or prod.
+	 * @return string|WP_Error Access token on success, WP_Error on failure.
+	 */
+	public static function get_token_for_read_payment_link( $merchant_id, $client_id, $client_secret, $environment ) {
+		$scope   = self::SCOPE_READ_PAYMENT_LINKS;
 		$scope   = function_exists( 'payu_normalize_scope_string' ) ? payu_normalize_scope_string( $scope ) : $scope;
 		$hash    = function_exists( 'payu_scope_hash' ) ? payu_scope_hash( $scope ) : hash( 'sha256', $scope );
 		$env_db  = self::normalize_environment_for_db( $environment );
