@@ -5,10 +5,18 @@
 	'use strict';
 
 	var config = window.payuStatusPage;
-	if (!config || !config.ajaxUrl || !config.invoice) {
+	if (!config || !config.ajaxUrl) {
 		return;
 	}
-	
+	// Server-side rendered result: nothing to fetch.
+	if (config.preloaded && config.data) {
+		return;
+	}
+	// Invoice required for fetch (optional when only binding Try again for server-rendered error).
+	if (!config.invoice && !config.error) {
+		return;
+	}
+
 	var $loader = $('#payu-status-loader');
 	var $error = $('#payu-status-error');
 	var $errorTitle = $('#payu-status-error-title');
@@ -40,8 +48,14 @@
 			title = i18n.errorNoConfig || 'Payment setup incomplete';
 			msg = i18n.errorNoConfigMsg || 'The store has not completed PayU setup. Please contact the store.';
 		} else if (code === 'invalid_invoice') {
-			title = i18n.errorInvalid || 'Invalid link';
-			msg = i18n.errorInvalidMsg || 'The invoice or link is invalid. Please check and try again.';
+			title = i18n.errorGeneric || 'Something went wrong';
+			msg = i18n.errorVerifying || "We're verifying your payment. Please refresh in a moment.";
+		} else if (code === 'payu_no_transactions') {
+			title = i18n.errorNoTransactions || 'Payment details not available';
+			msg = i18n.errorNoTransactionsMsg || 'Payment details are not available yet. Please try again in a moment or contact support with your invoice number.';
+		} else if (code === 'no_data') {
+			title = i18n.errorGeneric || 'Something went wrong';
+			msg = i18n.errorVerifying || "We're verifying your payment. Please refresh in a moment.";
 		}
 		return { title: title, message: msg };
 	}
@@ -50,7 +64,7 @@
 		hideLoader();
 		var content = getErrorContent(code || '');
 		$errorTitle.text(content.title);
-		$errorMessage.text(content.message);
+		$errorMessage.text(serverMessage || content.message);
 		var shopUrl = (typeof wc_get_page_permalink === 'function' && wc_get_page_permalink('shop')) ? wc_get_page_permalink('shop') : (window.location.origin || '/');
 		var html = '<a href="' + shopUrl + '" class="payu-status-btn payu-status-btn-primary">' + (i18n.backToShop || 'Back to shop') + '</a>';
 		html += '<button type="button" class="payu-status-btn payu-status-btn-secondary" id="payu-status-try-again">' + (i18n.tryAgain || 'Try again') + '</button>';
@@ -59,7 +73,6 @@
 		$result.removeClass('is-visible');
 		$('#payu-status-try-again').on('click', function () {
 			$error.removeClass('is-visible');
-			$errorActions.empty();
 			$loader.removeClass('is-hidden');
 			$result.removeClass('is-visible');
 			fetchStatus();
@@ -105,26 +118,95 @@
 
 	function renderDetails(data) {
 		var currency = data.currency || '';
+		// Normalize transactions: backend may send array, or object (PHP assoc array), or JSON string
+		var rawTxns = data.transactions;
+		var txns = [];
+		if (rawTxns) {
+			if (Array.isArray(rawTxns)) {
+				txns = rawTxns;
+			} else if (typeof rawTxns === 'string') {
+				try {
+					var parsed = JSON.parse(rawTxns);
+					txns = Array.isArray(parsed) ? parsed : (parsed && typeof parsed === 'object' ? Object.values(parsed) : []);
+				} catch (e) {
+					txns = [];
+				}
+			} else if (typeof rawTxns === 'object' && rawTxns !== null) {
+				txns = Object.keys(rawTxns).map(function (k) { return rawTxns[k]; });
+			}
+		}
 		var html = '';
 		html += '<div class="payu-status-row"><span class="payu-status-label">' + (i18n.invoice || 'Invoice ID') + '</span><span class="payu-status-value">' + (data.invoice ? $('<div>').text(data.invoice).html() : '—') + '</span></div>';
 		html += '<div class="payu-status-row"><span class="payu-status-label">' + (i18n.orderRef || 'Order reference') + '</span><span class="payu-status-value">' + (data.order_ref ? $('<div>').text(data.order_ref).html() : '—') + '</span></div>';
-		html += '<div class="payu-status-row"><span class="payu-status-label">' + (i18n.status || 'Payment status') + '</span><span class="payu-status-badge">' + $('<div>').text(statusLabel(data.display_status)).html() + '</span></div>';
+		html += '<div class="payu-status-row"><span class="payu-status-label">' + (i18n.invoiceStatus || 'Invoice status') + '</span><span class="payu-status-badge">' + $('<div>').text(statusLabel(data.display_status)).html() + '</span></div>';
 		html += '<div class="payu-status-row"><span class="payu-status-label">' + (i18n.total || 'Total amount') + '</span><span class="payu-status-value">' + formatAmount(data.total, currency) + '</span></div>';
 		html += '<div class="payu-status-row"><span class="payu-status-label">' + (i18n.amountPaid || 'Amount paid') + '</span><span class="payu-status-value highlight">' + formatAmount(data.amount_paid, currency) + '</span></div>';
 		html += '<div class="payu-status-row"><span class="payu-status-label">' + (i18n.remaining || 'Remaining') + '</span><span class="payu-status-value">' + formatAmount(data.remaining, currency) + '</span></div>';
+		// User-friendly status: Success, Failed, In Progress, User Cancelled.
+		function txnStatusLabel(s) {
+			var u = (s || '').toUpperCase();
+			if (u === 'PAID' || u === 'SUCCESS') return i18n.txnSuccess || 'Success';
+			if (u === 'PARTIALLY_PAID') return i18n.txnPartiallyPaid || 'Partially paid';
+			if (u === 'PENDING' || u === 'INITIATED') return i18n.txnInProgress || 'In Progress';
+			if (u === 'FAILED') return i18n.txnFailed || 'Failed';
+			if (u === 'CANCELLED' || u === 'USERCANCELLED') return i18n.txnUserCancelled || 'User Cancelled';
+			return s || '—';
+		}
+		function txnStatusBadgeClass(label) {
+			var l = (label || '').toLowerCase().replace(/\s+/g, '-');
+			if (l === 'failed') return 'payu-status-badge--failed';
+			if (l === 'success') return 'payu-status-badge--success';
+			if (l === 'in-progress') return 'payu-status-badge--in-progress';
+			if (l === 'user-cancelled') return 'payu-status-badge--user-cancelled';
+			return '';
+		}
+		function dateTimeHtml(t) {
+			var d = t.date_display || '';
+			var tm = t.time_display || '';
+			if (!d && !tm) return $('<div>').text(t.date || '—').html();
+			var h = '<span class="payu-status-datetime">';
+			if (d) h += '<span class="payu-status-date-line">' + $('<div>').text(d).html() + '</span>';
+			if (tm) h += '<span class="payu-status-time-line">' + $('<div>').text(tm).html() + '</span>';
+			h += '</span>';
+			return h;
+		}
+		var displayStatus = (data.display_status || '').toUpperCase();
+		var isPartial = displayStatus === 'PARTIALLY_PAID';
+		var isPaid = displayStatus === 'PAID';
+		var showTable = (isPartial && txns.length >= 1) || (!isPaid && txns.length > 1);
+		var showSingle = (isPaid && txns.length >= 1) || (txns.length === 1 && !isPartial);
+
+		if (showTable) {
+			html += '<div class="payu-status-txn-block"><div class="payu-status-txn-heading">' + (i18n.paymentTxns || 'Payment transactions') + '</div><table class="payu-status-txn-table" role="table" aria-label="' + (i18n.paymentTxns || 'Payment transactions') + '"><thead><tr><th scope="col">' + (i18n.dateTime || 'Date & time') + '</th><th scope="col">' + (i18n.transactionId || 'Transaction ID') + '</th><th scope="col">' + (i18n.amount || 'Amount') + '</th><th scope="col">' + (i18n.txnStatus || 'Transaction status') + '</th></tr></thead><tbody>';
+			for (var i = 0; i < txns.length; i++) {
+				var t = txns[i];
+				var txnStatusText = txnStatusLabel(t.status);
+				var badgeClass = txnStatusBadgeClass(txnStatusText);
+				html += '<tr><td class="payu-status-datetime-cell">' + dateTimeHtml(t) + '</td><td><span class="payu-status-txn-id">' + $('<div>').text(t.transaction_id || '—').html() + '</span></td><td>' + formatAmount(t.amount, currency) + '</td><td><span class="payu-status-badge ' + badgeClass + '">' + $('<div>').text(txnStatusText).html() + '</span></td></tr>';
+			}
+			html += '</tbody></table></div>';
+		} else if (showSingle) {
+			var t0 = txns[0];
+			html += '<div class="payu-status-row payu-status-row-txn"><span class="payu-status-label">' + (i18n.transactionNo || 'Transaction No.') + '</span><span class="payu-status-value"><span class="payu-status-txn-id">' + $('<div>').text(t0.transaction_id || '—').html() + '</span></span></div>';
+			html += '<div class="payu-status-row"><span class="payu-status-label">' + (i18n.dateTime || 'Date & time') + '</span><span class="payu-status-value payu-status-datetime">' + dateTimeHtml(t0) + '</span></div>';
+		} else {
+			html += '<div class="payu-status-row"><span class="payu-status-label">' + (i18n.transactionNo || 'Transaction No.') + '</span><span class="payu-status-value">—</span></div>';
+		}
 		$details.html(html);
 	}
 
 	function renderActions(data) {
 		var shopUrl = (typeof wc_get_page_permalink === 'function' && wc_get_page_permalink('shop')) ? wc_get_page_permalink('shop') : (window.location.origin || '/');
 		var orderUrl = '';
-		if (data.order_ref && data.order_ref !== '—' && typeof wc_get_endpoint_url === 'function' && typeof wc_get_page_permalink === 'function') {
+		var orderId = data.order_id || (data.order_ref && data.order_ref !== '—' && /^\d+$/.test(String(data.order_ref)) ? String(data.order_ref) : null);
+		if (orderId && typeof wc_get_endpoint_url === 'function' && typeof wc_get_page_permalink === 'function') {
 			var myaccount = wc_get_page_permalink('myaccount');
-			if (myaccount) orderUrl = wc_get_endpoint_url('view-order', data.order_ref, myaccount);
+			if (myaccount) orderUrl = wc_get_endpoint_url('view-order', orderId, myaccount);
 		}
 		var html = '';
+		html += '<button type="button" class="payu-status-btn payu-status-btn-primary" onclick="window.print(); return false;">' + (i18n.print || 'Print') + '</button>';
 		if (orderUrl && (data.display_status || '').toUpperCase() === 'PAID') {
-			html += '<a href="' + orderUrl + '" class="payu-status-btn payu-status-btn-primary">' + (i18n.viewOrder || 'View order') + '</a>';
+			html += '<a href="' + orderUrl + '" class="payu-status-btn payu-status-btn-secondary">' + (i18n.viewOrder || 'View order') + '</a>';
 		}
 		html += '<a href="' + shopUrl + '" class="payu-status-btn payu-status-btn-secondary">' + (i18n.backToShop || 'Back to shop') + '</a>';
 		$actions.html(html);
@@ -160,10 +242,20 @@
 			}
 		}).fail(function (jqXHR, textStatus, errorThrown) {
 			var data = (jqXHR.responseJSON && jqXHR.responseJSON.data) ? jqXHR.responseJSON.data : {};
-			var msg = data.message || (typeof errorThrown === 'string' ? errorThrown : '') || (typeof textStatus === 'string' ? textStatus : '') || (i18n.error || '');
-			showError(msg, data.code || 'error');
+			var msg = data.message || (i18n.errorVerifying || "We're verifying your payment. Please refresh in a moment.");
+			showError(msg, data.code || 'no_data');
 		});
 	}
 
+	// Server-rendered error: bind Try again to fetch and show loader.
+	if (config.error) {
+		$('#payu-status-try-again').on('click', function () {
+			$error.removeClass('is-visible');
+			$loader.removeClass('is-hidden');
+			$result.removeClass('is-visible');
+			fetchStatus();
+		});
+		return;
+	}
 	fetchStatus();
 })(jQuery);

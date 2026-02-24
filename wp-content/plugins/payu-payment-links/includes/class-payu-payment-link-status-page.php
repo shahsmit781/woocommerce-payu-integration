@@ -88,13 +88,22 @@ class PayU_Payment_Link_Status_Page {
 	}
 
 	/**
-	 * Output interactive status page: loader first, then JS fetches PayU status and displays result.
-	 * Does NOT assume success/failure from redirect; backend-verified status only.
+	 * Output interactive status page. Always show loader until response: JS fetches status via AJAX, then displays result or error.
+	 * When invoice is missing, show error immediately (no fetch). Try again uses AJAX.
 	 *
 	 * @param string $invoice Invoice identifier from query param.
 	 */
 	private function render_status_page( $invoice ) {
-		$invoice_safe = sanitize_text_field( $invoice );
+		$invoice_safe   = sanitize_text_field( $invoice );
+		$status_display = null;
+		$status_error   = null;
+
+		if ( $invoice_safe === '' ) {
+			$status_error = array(
+				'code'    => 'invalid_invoice',
+				'message' => __( 'The invoice or link is invalid. Please check and try again.', 'payu-payment-links' ),
+			);
+		}
 		nocache_headers();
 		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
 		header( 'Pragma: no-cache' );
@@ -112,10 +121,13 @@ class PayU_Payment_Link_Status_Page {
 		if ( $url ) {
 			wp_enqueue_script( $handle, $url, array( 'jquery' ), PAYU_PAYMENT_LINKS_VERSION, true );
 			wp_localize_script( $handle, 'payuStatusPage', array(
-				'ajaxUrl' => $ajax_url,
-				'action'  => $ajax_action,
-				'invoice' => $invoice_safe,
-				'i18n'    => array(
+				'ajaxUrl'    => $ajax_url,
+				'action'     => $ajax_action,
+				'invoice'    => $invoice_safe,
+				'preloaded'  => (bool) $status_display,
+				'data'       => $status_display,
+				'error'      => $status_error,
+				'i18n'       => array(
 					'fetching'       => __( 'Fetching payment status…', 'payu-payment-links' ),
 					'error'          => __( 'Unable to fetch payment status. Please try again.', 'payu-payment-links' ),
 					'errorNoLink'    => __( 'Payment link not found', 'payu-payment-links' ),
@@ -124,8 +136,11 @@ class PayU_Payment_Link_Status_Page {
 					'errorNoConfigMsg' => __( 'The store has not completed PayU setup. Please contact the store.', 'payu-payment-links' ),
 					'errorInvalid'   => __( 'Invalid link', 'payu-payment-links' ),
 					'errorInvalidMsg'=> __( 'The invoice or link is invalid. Please check and try again.', 'payu-payment-links' ),
+					'errorNoTransactions' => __( 'Payment details not available', 'payu-payment-links' ),
+					'errorNoTransactionsMsg' => __( 'Payment details are not available yet. Please try again in a moment or contact support with your invoice number.', 'payu-payment-links' ),
 					'errorGeneric'   => __( 'Something went wrong', 'payu-payment-links' ),
 					'errorGenericMsg'=> __( 'We couldn’t load the payment status. Please try again or contact the store.', 'payu-payment-links' ),
+					'errorVerifying' => __( "We're verifying your payment. Please refresh in a moment.", 'payu-payment-links' ),
 					'paid'           => __( 'Full payment completed', 'payu-payment-links' ),
 					'partial'        => __( 'Partial payment received', 'payu-payment-links' ),
 					'failed'         => __( 'Payment failed', 'payu-payment-links' ),
@@ -134,9 +149,23 @@ class PayU_Payment_Link_Status_Page {
 					'invoice'        => __( 'Invoice ID', 'payu-payment-links' ),
 					'orderRef'       => __( 'Order reference', 'payu-payment-links' ),
 					'status'         => __( 'Payment status', 'payu-payment-links' ),
+					'invoiceStatus'  => __( 'Invoice status', 'payu-payment-links' ),
+					'txnStatus'      => __( 'Transaction status', 'payu-payment-links' ),
+					'print'          => __( 'Print', 'payu-payment-links' ),
 					'total'          => __( 'Total amount', 'payu-payment-links' ),
 					'amountPaid'     => __( 'Amount paid', 'payu-payment-links' ),
 					'remaining'      => __( 'Remaining', 'payu-payment-links' ),
+					'transactionNo'  => __( 'Transaction No.', 'payu-payment-links' ),
+					'transactionId'  => __( 'Transaction ID', 'payu-payment-links' ),
+					'paymentTxns'    => __( 'Payment transactions', 'payu-payment-links' ),
+					'date'           => __( 'Date', 'payu-payment-links' ),
+					'dateTime'       => __( 'Date & time', 'payu-payment-links' ),
+					'amount'         => __( 'Amount', 'payu-payment-links' ),
+					'txnSuccess'     => __( 'Success', 'payu-payment-links' ),
+					'txnPartiallyPaid' => __( 'Partially paid', 'payu-payment-links' ),
+					'txnInProgress'  => __( 'In Progress', 'payu-payment-links' ),
+					'txnFailed'      => __( 'Failed', 'payu-payment-links' ),
+					'txnUserCancelled' => __( 'User Cancelled', 'payu-payment-links' ),
 					'viewOrder'      => __( 'View order', 'payu-payment-links' ),
 					'backToShop'     => __( 'Back to shop', 'payu-payment-links' ),
 					'tryAgain'       => __( 'Try again', 'payu-payment-links' ),

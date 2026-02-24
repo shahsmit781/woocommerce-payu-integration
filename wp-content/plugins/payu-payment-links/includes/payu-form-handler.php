@@ -161,6 +161,15 @@ function payu_get_active_payu_currencies() {
  * @param array  $extra            Optional: config_id, mid, env, isPartialPaymentAllowed, min_initial_payment, max_instalments, customerName, customerPhone, customerEmail, emailStatus, smsStatus, udf1, udf5.
  * @return int|false Insert ID or false.
  */
+function payu_order_reference_display( $order_id ) {
+	$order_id = absint( $order_id );
+	if ( ! $order_id ) {
+		return '';
+	}
+	$prefix = apply_filters( 'payu_order_reference_prefix', 'ORD-', $order_id );
+	return $prefix . $order_id;
+}
+
 function payu_save_payment_link_response( $order_id, $payu_invoice_number, $payment_link_url, $amount, $currency, $environment, $expiry_date, $extra = array() ) {
 	global $wpdb;
 	$table  = function_exists( 'payu_get_payment_links_table_name' ) ? payu_get_payment_links_table_name() : $wpdb->prefix . 'payu_payment_links';
@@ -177,7 +186,8 @@ function payu_save_payment_link_response( $order_id, $payu_invoice_number, $paym
 		'currency'                  => sanitize_text_field( $currency ),
 		'paid_amount'               => 0,
 		'remaining_amount'          => $amount,
-		'status'                    => 'pending',
+		'status'                    => defined( 'PAYU_PAYMENT_STATUS_PENDING' ) ? PAYU_PAYMENT_STATUS_PENDING : 'PENDING',
+		'payment_link_status'      => defined( 'PAYU_LINK_STATUS_ACTIVE' ) ? PAYU_LINK_STATUS_ACTIVE : 'active',
 		'expiry_date'               => $expiry_date ? sanitize_text_field( $expiry_date ) : null,
 		'environment'               => sanitize_text_field( $environment ),
 		'isPartialPaymentAllowed'   => isset( $extra['isPartialPaymentAllowed'] ) ? (int) (bool) $extra['isPartialPaymentAllowed'] : 0,
@@ -191,12 +201,12 @@ function payu_save_payment_link_response( $order_id, $payu_invoice_number, $paym
 		'is_sms_sent'                => isset( $extra['is_sms_sent'] ) ? (int) (bool) $extra['is_sms_sent'] : 0,
 		'emailStatus'               => isset( $extra['emailStatus'] ) ? sanitize_textarea_field( $extra['emailStatus'] ) : null,
 		'smsStatus'                 => isset( $extra['smsStatus'] ) ? sanitize_textarea_field( $extra['smsStatus'] ) : null,
-		'udf1'                      => isset( $extra['udf1'] ) ? sanitize_text_field( $extra['udf1'] ) : (string) $order_id,
+		'udf1'                      => isset( $extra['udf1'] ) ? sanitize_text_field( $extra['udf1'] ) : payu_order_reference_display( $order_id ),
 		'udf5'                      => ( isset( $extra['udf5'] ) && '' !== trim( (string) $extra['udf5'] ) ) ? sanitize_text_field( $extra['udf5'] ) : 'WooCommerce_paymentlink',
 		'config_id'                 => isset( $extra['config_id'] ) ? absint( $extra['config_id'] ) : null,
 	);
 
-	$formats = array( '%d', '%s', '%s', '%f', '%s', '%f', '%f', '%s', '%s', '%s', '%d', '%f', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%d' );
+	$formats = array( '%d', '%s', '%s', '%f', '%s', '%f', '%f', '%s', '%s', '%s', '%s', '%d', '%f', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%d' );
 
 	$r = $wpdb->insert( $table, $row, $formats );
 	return $r ? $wpdb->insert_id : false;
@@ -331,7 +341,7 @@ function payu_create_payment_link_api( $order, $data ) {
 		'is_sms_sent'                => ! empty( $data['notify_sms'] ) && ! empty( $data['customer_phone'] ) ? 1 : 0,
 		'emailStatus'              => ! empty($result['emailStatus']) ? sanitize_textarea_field( $result['emailStatus'] ) : null,
 		'smsStatus'                => ! empty($result['smsStatus']) ? sanitize_textarea_field( $result['smsStatus'] ) : null,
-		'udf1'                     => (string) $order_id,
+		'udf1'                     => payu_order_reference_display( $order_id ),
 		'udf5'                     => 'WooCommerce_paymentlink',
 	);
 
@@ -370,7 +380,8 @@ function payu_build_create_link_payload( $order, $data, $invoice_number ) {
 		'viaEmail'                => ! empty( $data['notify_email'] ),
 		'viaSms'                  => ! empty( $data['notify_sms'] ),
 		'udf'                     => array(
-			'udf1' => (string) $order->get_id(),
+			'udf1' => payu_order_reference_display( $order->get_id() ),
+			'udf2' => $invoice_number,
 			'udf5' => 'WooCommerce_paymentlink',
 		),
 		'successURL'              => class_exists( 'PayU_Payment_Link_Status_Page' ) ? PayU_Payment_Link_Status_Page::get_status_url( $invoice_number ) : $order->get_checkout_order_received_url(),

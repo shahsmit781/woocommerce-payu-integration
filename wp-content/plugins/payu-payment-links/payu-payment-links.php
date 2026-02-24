@@ -40,8 +40,6 @@ if ( ! defined( 'PAYU_PAYMENT_LINKS_MIN_WC_VERSION' ) ) {
 	define( 'PAYU_PAYMENT_LINKS_MIN_WC_VERSION', '5.0' );
 }
 
-define('WP_DEBUG', true); 
-
 /**
  * Check PHP version compatibility
  *
@@ -172,8 +170,12 @@ function payu_payment_links_create_db() {
 	if ( file_exists( PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-payment-link-status-page.php' ) ) {
 		require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-payment-link-status-page.php';
 		PayU_Payment_Link_Status_Page::register_rewrite_rule_for_activation();
-		flush_rewrite_rules( true );
 	}
+	if ( file_exists( PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-webhook-receiver.php' ) ) {
+		require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-webhook-receiver.php';
+		PayU_Webhook_Receiver::register_rewrite_rule_for_activation();
+	}
+	flush_rewrite_rules( true );
 }
 
 /**
@@ -326,6 +328,18 @@ add_action( 'plugins_loaded', 'payu_payment_links_load_textdomain' );
 // Ensure PayU tables exist/are updated when DB version is behind (e.g. reactivation didn't run)
 add_action( 'plugins_loaded', 'payu_payment_links_maybe_upgrade_db', 1 );
 
+// Payment status constants (canonical PENDING, PAID, PARTIALLY_PAID, FAILED; link lifecycle active, expired, deactivated) – load early for status page and gateway
+add_action( 'plugins_loaded', 'payu_payment_links_load_payment_status_constants', 2 );
+
+/**
+ * Load PayU payment status constants for DB writes, status resolution, and admin UI.
+ */
+function payu_payment_links_load_payment_status_constants() {
+	if ( file_exists( PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payu-payment-status-constants.php' ) ) {
+		require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payu-payment-status-constants.php';
+	}
+}
+
 /**
  * If stored DB version is older than plugin version (or missing), run table schema and update option.
  * Ensures tables are created/updated even when activation hook doesn't run (e.g. bulk activate).
@@ -339,8 +353,22 @@ function payu_payment_links_maybe_upgrade_db() {
 	update_option( 'payu_payment_links_db_version', PAYU_PAYMENT_LINKS_VERSION );
 }
 
+// PayU webhook receiver (public POST /payu/webhook) – capture and log only; no payment logic
+add_action( 'plugins_loaded', 'payu_payment_links_load_webhook_receiver', 1 );
+
 // Payment Link Status page (public /payment-link/status) – load early so rewrite and URL helper are available
 add_action( 'plugins_loaded', 'payu_payment_links_load_status_page', 5 );
+
+/**
+ * Load the PayU webhook receiver (rewrite + handler).
+ */
+function payu_payment_links_load_webhook_receiver() {
+	$file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-webhook-receiver.php';
+	if ( file_exists( $file ) ) {
+		require_once $file;
+		PayU_Webhook_Receiver::init();
+	}
+}
 
 /**
  * Load the Payment Link Status page class (rewrite rule + template).

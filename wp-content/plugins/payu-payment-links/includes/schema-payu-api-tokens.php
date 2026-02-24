@@ -5,6 +5,10 @@
  * Defines: wp_payu_currency_configs, wp_payu_api_tokens, wp_payu_payment_links, wp_payu_payment_transactions.
  * Use dbDelta on activation or when DB version is behind.
  *
+ * Terminology:
+ * - Payment Status (money outcome): PENDING, PAID, PARTIALLY_PAID. Whether and how much was paid.
+ * - Payment Link Status (link lifecycle): active, expired, deactivated. PayU link state, independent of payment result.
+ *
  * @package PayU_Payment_Links
  */
 
@@ -149,7 +153,10 @@ function payu_get_payment_links_table_name() {
 
 /**
  * Get the SQL definition for the PayU payment links table.
- * dbDelta-compatible (two spaces before PRIMARY KEY, etc.).
+ *
+ * Column notes:
+ * - status: Payment outcome only. Allowed: PENDING, PAID, PARTIALLY_PAID. Not link lifecycle.
+ * - payment_link_status: PayU link lifecycle only. Allowed: active, expired, deactivated. Independent of payment result.
  *
  * @return string Full CREATE TABLE statement (no charset; caller appends).
  */
@@ -165,7 +172,8 @@ function payu_get_payment_links_schema_sql() {
 	amount decimal(18,2) NOT NULL DEFAULT 0.00,
 	paid_amount decimal(18,2) NOT NULL DEFAULT 0.00,
 	remaining_amount decimal(18,2) NOT NULL DEFAULT 0.00,
-	status varchar(20) NOT NULL DEFAULT 'pending',
+	status varchar(20) NOT NULL DEFAULT 'PENDING',
+	payment_link_status varchar(20) DEFAULT NULL,
 	expiry_date datetime DEFAULT NULL,
 	isPartialPaymentAllowed tinyint(1) NOT NULL DEFAULT 0,
 	min_initial_payment decimal(18,2) DEFAULT NULL,
@@ -191,6 +199,7 @@ function payu_get_payment_links_schema_sql() {
 	UNIQUE KEY payu_invoice_number (payu_invoice_number),
 	KEY order_id (order_id),
 	KEY status (status),
+	KEY payment_link_status (payment_link_status),
 	KEY currency (currency),
 	KEY environment (environment),
 	KEY created_at (created_at),
@@ -201,6 +210,7 @@ function payu_get_payment_links_schema_sql() {
 
 /**
  * Create or update the PayU payment links table (dbDelta).
+ * Migration: adds payment_link_status if missing; status default is PENDING (canonical payment outcome).
  *
  * @return void
  */
@@ -226,6 +236,10 @@ function payu_get_payment_transactions_table_name() {
  * Get the SQL definition for the PayU payment transactions table.
  * dbDelta-compatible.
  *
+ * Column notes:
+ * - merchantReferenceId: Merchant-side reference (e.g. invoice number / order reference). Used for reconciliation and idempotency.
+ * - status: Transaction-level payment outcome. Aligns with canonical statuses: PENDING, PAID, PARTIALLY_PAID, FAILED.
+ *
  * @return string Full CREATE TABLE statement (no charset; caller appends).
  */
 function payu_get_payment_transactions_schema_sql() {
@@ -234,14 +248,20 @@ function payu_get_payment_transactions_schema_sql() {
 	id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 	payment_link_id bigint(20) unsigned NOT NULL,
 	transaction_id varchar(100) DEFAULT NULL,
+	merchantReferenceId varchar(100) DEFAULT NULL,
+	invoice_number varchar(100) DEFAULT NULL,
 	amount decimal(18,2) NOT NULL DEFAULT 0.00,
 	payment_mode varchar(50) DEFAULT NULL,
+	bankCode varchar(50) DEFAULT NULL,
+	card_num varchar(50) DEFAULT NULL,
 	bank_reference varchar(100) DEFAULT NULL,
-	status varchar(20) NOT NULL DEFAULT 'pending',
+	status varchar(20) NOT NULL DEFAULT 'PENDING',
 	created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY  (id),
+	UNIQUE KEY uk_transaction_id (transaction_id),
 	KEY payment_link_id (payment_link_id),
 	KEY transaction_id (transaction_id),
+	KEY merchantReferenceId (merchantReferenceId),
 	KEY status (status)
 )";
 }
