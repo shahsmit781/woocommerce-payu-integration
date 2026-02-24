@@ -200,7 +200,7 @@ class PayU_Payment_Link_Status_Ajax {
 			}
 		}
 
-		$date_from = isset( $row->created_at ) ? date( 'Y-m-d', strtotime( $row->created_at ) ) : gmdate( 'Y-m-d', strtotime( '-30 days' ) );
+		$date_from = isset( $row->created_at ) ? gmdate( 'Y-m-d', strtotime( $row->created_at ) ) : gmdate( 'Y-m-d', strtotime( '-30 days' ) );
 		$date_to   = gmdate( 'Y-m-d' );
 
 		$txn_list  = self::fetch_transaction_details( $invoice_for_txn, $date_from, $date_to, $config );
@@ -286,7 +286,7 @@ class PayU_Payment_Link_Status_Ajax {
 	 */
 	private static function build_display_from_api_result( $result, $invoice, $row ) {
 		$order_id = $row && ! empty( $row->order_id ) ? (int) $row->order_id : 0;
-		$order_ref = payu_order_reference_display( $order_id );
+		$order_ref = function_exists( 'payu_order_reference_display' ) ? payu_order_reference_display( $order_id ) : 'ORD - ' . $order_id;		
 		$currency  = $row && ! empty( $row->currency ) ? $row->currency : ( isset( $result['currency'] ) ? sanitize_text_field( $result['currency'] ) : '' );
 		if ( '' === $currency && function_exists( 'get_woocommerce_currency' ) ) {
 			$currency = get_woocommerce_currency();
@@ -633,19 +633,41 @@ class PayU_Payment_Link_Status_Ajax {
 					), array( '%d', '%s', '%s', '%s', '%f', '%s', '%s', '%s', '%s', '%s' ) );
 				}
 			} else {
-				// transaction_id is null: still save record (DB allows NULL in unique column).
-				$wpdb->insert( $table, array(
-					'payment_link_id'     => $payment_link_id,
-					'transaction_id'      => null,
-					'merchantReferenceId' => $merchant_ref,
-					'invoice_number'      => $invoice_number,
-					'amount'              => $amount,
-					'payment_mode'        => $mode,
-					'bankCode'            => $bank_code,
-					'card_num'            => $card_num,
-					'status'              => $status,
-					'created_at'          => $created_on ? $created_on : current_time( 'mysql' ),
-				), array( '%d', '%s', '%s', '%s', '%f', '%s', '%s', '%s', '%s', '%s' ) );
+				// transaction_id is null: deduplicate to avoid unbounded rows on every status-page refresh.
+				$created_at_val = $created_on ? $created_on : current_time( 'mysql' );
+				if ( $created_on ) {
+					$existing_null = $wpdb->get_var( $wpdb->prepare(
+						"SELECT id FROM {$table} WHERE transaction_id IS NULL AND payment_link_id = %d AND invoice_number = %s AND amount = %f AND status = %s AND created_at = %s LIMIT 1",
+						$payment_link_id,
+						$invoice_number,
+						$amount,
+						$status,
+						$created_at_val
+					) );
+				} else {
+					// No createdOn from API: allow only one null-ID row per (payment_link_id, invoice_number, amount, status).
+					$existing_null = $wpdb->get_var( $wpdb->prepare(
+						"SELECT id FROM {$table} WHERE transaction_id IS NULL AND payment_link_id = %d AND invoice_number = %s AND amount = %f AND status = %s LIMIT 1",
+						$payment_link_id,
+						$invoice_number,
+						$amount,
+						$status
+					) );
+				}
+				if ( ! $existing_null ) {
+					$wpdb->insert( $table, array(
+						'payment_link_id'     => $payment_link_id,
+						'transaction_id'      => null,
+						'merchantReferenceId' => $merchant_ref,
+						'invoice_number'      => $invoice_number,
+						'amount'              => $amount,
+						'payment_mode'        => $mode,
+						'bankCode'            => $bank_code,
+						'card_num'            => $card_num,
+						'status'              => $status,
+						'created_at'          => $created_at_val,
+					), array( '%d', '%s', '%s', '%s', '%f', '%s', '%s', '%s', '%s', '%s' ) );
+				}
 			}
 		}
 		return true;

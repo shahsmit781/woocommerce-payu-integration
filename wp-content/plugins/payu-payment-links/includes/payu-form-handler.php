@@ -166,7 +166,7 @@ function payu_order_reference_display( $order_id ) {
 	if ( ! $order_id ) {
 		return '';
 	}
-	$prefix = apply_filters( 'payu_order_reference_prefix', 'ORD-', $order_id );
+	$prefix = sanitize_text_field( (string) apply_filters( 'payu_order_reference_prefix', 'ORD-', $order_id ) );
 	return $prefix . $order_id;
 }
 
@@ -201,7 +201,7 @@ function payu_save_payment_link_response( $order_id, $payu_invoice_number, $paym
 		'is_sms_sent'                => isset( $extra['is_sms_sent'] ) ? (int) (bool) $extra['is_sms_sent'] : 0,
 		'emailStatus'               => isset( $extra['emailStatus'] ) ? sanitize_textarea_field( $extra['emailStatus'] ) : null,
 		'smsStatus'                 => isset( $extra['smsStatus'] ) ? sanitize_textarea_field( $extra['smsStatus'] ) : null,
-		'udf1'                      => isset( $extra['udf1'] ) ? sanitize_text_field( $extra['udf1'] ) : payu_order_reference_display( $order_id ),
+		'udf1'                      => sanitize_text_field( isset( $extra['udf1'] ) ? (string) $extra['udf1'] : payu_order_reference_display( $order_id ) ),
 		'udf5'                      => ( isset( $extra['udf5'] ) && '' !== trim( (string) $extra['udf5'] ) ) ? sanitize_text_field( $extra['udf5'] ) : 'WooCommerce_paymentlink',
 		'config_id'                 => isset( $extra['config_id'] ) ? absint( $extra['config_id'] ) : null,
 	);

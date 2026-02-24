@@ -139,8 +139,6 @@ header( 'Content-Type: text/html; charset=' . get_bloginfo( 'charset' ) );
 ?></h2>
 				<p class="payu-status-error-message" id="payu-status-error-message"><?php echo esc_html( isset( $status_error['message'] ) ? $status_error['message'] : __( 'We couldn’t load the payment status. Please try again or contact the store.', 'payu-payment-links' ) ); ?></p>
 				<div class="payu-status-error-actions" id="payu-status-error-actions">
-					<?php $shop_url = function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'shop' ) : home_url( '/' ); ?>
-					<a href="<?php echo esc_url( $shop_url ); ?>" class="payu-status-btn payu-status-btn-primary"><?php esc_html_e( 'Back to shop', 'payu-payment-links' ); ?></a>
 					<button type="button" class="payu-status-btn payu-status-btn-secondary" id="payu-status-try-again"><?php esc_html_e( 'Try again', 'payu-payment-links' ); ?></button>
 				</div>
 			</div>

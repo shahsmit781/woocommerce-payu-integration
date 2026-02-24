@@ -66,8 +66,7 @@
 		$errorTitle.text(content.title);
 		$errorMessage.text(serverMessage || content.message);
 		var shopUrl = (typeof wc_get_page_permalink === 'function' && wc_get_page_permalink('shop')) ? wc_get_page_permalink('shop') : (window.location.origin || '/');
-		var html = '<a href="' + shopUrl + '" class="payu-status-btn payu-status-btn-primary">' + (i18n.backToShop || 'Back to shop') + '</a>';
-		html += '<button type="button" class="payu-status-btn payu-status-btn-secondary" id="payu-status-try-again">' + (i18n.tryAgain || 'Try again') + '</button>';
+		var html = '<button type="button" class="payu-status-btn payu-status-btn-secondary" id="payu-status-try-again">' + (i18n.tryAgain || 'Try again') + '</button>';
 		$errorActions.html(html);
 		$error.addClass('is-visible');
 		$result.removeClass('is-visible');
@@ -205,10 +204,6 @@
 		}
 		var html = '';
 		html += '<button type="button" class="payu-status-btn payu-status-btn-primary" onclick="window.print(); return false;">' + (i18n.print || 'Print') + '</button>';
-		if (orderUrl && (data.display_status || '').toUpperCase() === 'PAID') {
-			html += '<a href="' + orderUrl + '" class="payu-status-btn payu-status-btn-secondary">' + (i18n.viewOrder || 'View order') + '</a>';
-		}
-		html += '<a href="' + shopUrl + '" class="payu-status-btn payu-status-btn-secondary">' + (i18n.backToShop || 'Back to shop') + '</a>';
 		$actions.html(html);
 	}
 

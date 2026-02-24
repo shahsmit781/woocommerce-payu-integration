@@ -17,7 +17,7 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Canonical payment status: no successful payment yet (awaiting or failed).
+ * Canonical payment status: awaiting payment; no transaction has completed yet.
  * Stored in wp_payu_payment_links.status and used for display when no amount collected.
  */
 if ( ! defined( 'PAYU_PAYMENT_STATUS_PENDING' ) ) {
