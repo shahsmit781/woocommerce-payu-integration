@@ -259,7 +259,8 @@ function payu_get_payment_transactions_schema_sql() {
 	created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY  (id),
 	UNIQUE KEY uk_transaction_id (transaction_id),
-	KEY payment_link_id (payment_link_id),	KEY merchantReferenceId (merchantReferenceId),
+	KEY payment_link_id (payment_link_id),
+	KEY merchantReferenceId (merchantReferenceId),
 	KEY status (status)
 )";
 }
