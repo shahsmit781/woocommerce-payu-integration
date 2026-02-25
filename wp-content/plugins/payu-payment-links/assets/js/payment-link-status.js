@@ -109,10 +109,7 @@
 		if (amount === null || amount === undefined || amount === '') return '—';
 		var num = parseFloat(amount, 10);
 		if (isNaN(num)) return '—';
-		if (currency && typeof wc_price === 'function') {
-			return wc_price(num, { currency: currency });
-		}
-		return (currency || '') + ' ' + num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+		return num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 	}
 
 	function renderDetails(data) {

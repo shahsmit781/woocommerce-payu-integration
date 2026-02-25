@@ -185,7 +185,7 @@ $default_currency = ! empty( $currencies[ $order_currency ] ) ? $order_currency 
 		</div>
 
 		<p class="submit">
-			<button type="submit" name="payu_submit_create_link" class="button button-primary" value="1"><?php esc_html_e( 'Create Payment Link', 'payu-payment-links' ); ?></button>
+			<button type="submit" name="payu_submit_create_link" id="payu-submit-create-link" class="button button-primary" value="1"><?php esc_html_e( 'Create Payment Link', 'payu-payment-links' ); ?></button>
 			<a href="<?php echo esc_url( $back_url ); ?>" class="button"><?php esc_html_e( 'Cancel', 'payu-payment-links' ); ?></a>
 		</p>
 	</form>

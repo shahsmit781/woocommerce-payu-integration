@@ -106,8 +106,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', __DIR__ . '/' );
 }
 
-define( 'WP_HOME', 'https://gerald-unwelded-griffin.ngrok-free.dev/woocommerce-payu-integration/' );
-define( 'WP_SITEURL', 'https://gerald-unwelded-griffin.ngrok-free.dev/woocommerce-payu-integration/' );
+define( 'WP_HOME', 'https://tall-tongue.outray.app/woocommerce-payu-integration/' );
+define( 'WP_SITEURL', 'https://tall-tongue.outray.app/woocommerce-payu-integration/' );
 
 // If your ngrok is HTTPS and you want WP to treat requests as HTTPS:
 if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {

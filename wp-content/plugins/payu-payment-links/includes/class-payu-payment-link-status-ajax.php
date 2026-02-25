@@ -259,8 +259,8 @@ class PayU_Payment_Link_Status_Ajax {
 				}
 				$ts = is_numeric( $raw ) ? (int) $raw : strtotime( $raw );
 				if ( $ts ) {
-					$date_display = date_i18n( 'j M', $ts ) . "'" . date_i18n( 'y', $ts );
-					$time_display = date_i18n( 'h:i:s A', $ts );
+					$date_display = wp_date( 'j M', $ts ) . "'" . wp_date( 'y', $ts );
+					$time_display = wp_date( 'h:i:s A', $ts );
 					$date         = $date_display . ', ' . $time_display;
 				}
 			}
@@ -464,7 +464,7 @@ class PayU_Payment_Link_Status_Ajax {
 			'remaining_amount'       => $remain,
 			'transaction_summary'    => $summary,
 			'payu_api_response_json' => $raw_json_safe,
-			'updated_at'             => current_time( 'mysql' ),
+			'updated_at'             => current_time( 'mysql' ), // WordPress timezone
 		);
 		$formats = array( '%s', '%s', '%f', '%f', '%f', '%s', '%s', '%s' );
 

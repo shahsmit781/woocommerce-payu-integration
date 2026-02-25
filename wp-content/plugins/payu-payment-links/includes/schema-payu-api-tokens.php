@@ -157,6 +157,7 @@ function payu_get_payment_links_table_name() {
  * Column notes:
  * - status: Payment outcome only. Allowed: PENDING, PAID, PARTIALLY_PAID. Not link lifecycle.
  * - payment_link_status: PayU link lifecycle only. Allowed: active, expired, deactivated. Independent of payment result.
+ * - created_at / updated_at: Set explicitly in PHP via current_time( 'mysql' ) so both use WordPress timezone. No ON UPDATE CURRENT_TIMESTAMP.
  *
  * @return string Full CREATE TABLE statement (no charset; caller appends).
  */
@@ -193,7 +194,7 @@ function payu_get_payment_links_schema_sql() {
 	transaction_summary text DEFAULT NULL,
 	payu_api_response_json longtext DEFAULT NULL,
 	created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	is_deleted tinyint(1) NOT NULL DEFAULT 0,
 	PRIMARY KEY  (id),
 	UNIQUE KEY payu_invoice_number (payu_invoice_number),

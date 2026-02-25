@@ -315,9 +315,10 @@ class PayU_Webhook_Receiver {
 				'paid_amount'     => $paid,
 				'remaining_amount' => $remaining,
 				'status'          => $status,
+				'updated_at'       => current_time( 'mysql' ), // WordPress timezone
 			),
 			array( 'id' => $payment_link_id ),
-			array( '%f', '%f', '%s' ),
+			array( '%f', '%f', '%s', '%s' ),
 			array( '%d' )
 		);
 	}

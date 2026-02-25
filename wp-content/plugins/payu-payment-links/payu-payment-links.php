@@ -220,6 +220,11 @@ function payu_payment_links_load_gateway() {
 		return;
 	}
 
+	// PayU supported currencies (from PayU docs – international/DCC)
+	if ( file_exists( PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payu-supported-currencies.php' ) ) {
+		require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payu-supported-currencies.php';
+	}
+
 	// Load template functions
 	require_once PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payu-template-functions.php';
 
@@ -279,6 +284,17 @@ function payu_payment_links_load_gateway() {
 	if ( file_exists( $order_payment_link_file ) && class_exists( 'WC_Order' ) ) {
 		require_once $order_payment_link_file;
 		new PayU_Order_Payment_Link();
+	}
+
+	// Order admin: PayU Payment Links read-only table (DB only, no API)
+	$repository_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-payment-links-repository.php';
+	if ( file_exists( $repository_file ) ) {
+		require_once $repository_file;
+	}
+	$order_payment_links_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/class-payu-order-payment-links.php';
+	if ( file_exists( $order_payment_links_file ) && class_exists( 'WC_Order' ) ) {
+		require_once $order_payment_links_file;
+		new PayU_Order_Payment_Links();
 	}
 
 	// Dedicated admin screen: Create Payment Link form (admin.php?page=payu-create-payment-link&order_id=…)

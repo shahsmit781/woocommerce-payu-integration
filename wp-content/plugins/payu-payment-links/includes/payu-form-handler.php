@@ -134,7 +134,7 @@ function payu_get_first_active_config() {
 function payu_get_active_payu_currencies() {
 	global $wpdb;
 	$table_name  = payu_get_currency_configs_table_name();
-	$currencies  = get_woocommerce_currencies();
+	$currencies  = function_exists( 'payu_get_supported_currencies' ) ? payu_get_supported_currencies() : array();
 	$rows        = $wpdb->get_col(
 		"SELECT DISTINCT currency FROM {$table_name} WHERE status = 'active' AND deleted_at IS NULL ORDER BY currency ASC"
 	);
@@ -150,6 +150,7 @@ function payu_get_active_payu_currencies() {
 
 /**
  * Persist PayU payment link response in database (wp_payu_payment_links).
+ * created_at and updated_at are set with current_time( 'mysql' ) so both use WordPress timezone.
  *
  * @param int    $order_id          WooCommerce order ID.
  * @param string $payu_invoice_number PayU invoice number.
@@ -204,9 +205,11 @@ function payu_save_payment_link_response( $order_id, $payu_invoice_number, $paym
 		'udf1'                      => sanitize_text_field( isset( $extra['udf1'] ) ? (string) $extra['udf1'] : payu_order_reference_display( $order_id ) ),
 		'udf5'                      => ( isset( $extra['udf5'] ) && '' !== trim( (string) $extra['udf5'] ) ) ? sanitize_text_field( $extra['udf5'] ) : 'WooCommerce_paymentlink',
 		'config_id'                 => isset( $extra['config_id'] ) ? absint( $extra['config_id'] ) : null,
+		'created_at'                => current_time( 'mysql' ), // WordPress timezone
+		'updated_at'                => current_time( 'mysql' ), // WordPress timezone
 	);
 
-	$formats = array( '%d', '%s', '%s', '%f', '%s', '%f', '%f', '%s', '%s', '%s', '%s', '%d', '%f', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%d' );
+	$formats = array( '%d', '%s', '%s', '%f', '%s', '%f', '%f', '%s', '%s', '%s', '%s', '%d', '%f', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s' );
 
 	$r = $wpdb->insert( $table, $row, $formats );
 	return $r ? $wpdb->insert_id : false;
@@ -226,12 +229,21 @@ function payu_create_payment_link_api( $order, $data ) {
 	}
 	$order_id = $order->get_id();
 	$amount   = (float) $data['amount'];
-	$order_total = (float) $order->get_total();
 	if ( $amount <= 0 ) {
 		return new WP_Error( 'invalid_amount', __( 'Payment amount must be greater than zero.', 'payu-payment-links' ) );
 	}
-	if ( $amount > $order_total ) {
-		return new WP_Error( 'invalid_amount', __( 'Payment amount must not exceed order total.', 'payu-payment-links' ) );
+	// Remaining amount from latest DB state (order_total - sum of successful transactions). No PayU API before this passes.
+	if ( class_exists( 'PayU_Payment_Links_Repository' ) ) {
+		$remaining_data = PayU_Payment_Links_Repository::get_remaining_payable_for_order( $order_id );
+		$remaining      = (float) $remaining_data['remaining'];
+		if ( $amount > $remaining ) {
+			return new WP_Error( 'amount_exceeds_remaining', __( 'Payment link amount cannot exceed the remaining order amount.', 'payu-payment-links' ) );
+		}
+	} else {
+		$order_total = (float) $order->get_total();
+		if ( $amount > $order_total ) {
+			return new WP_Error( 'invalid_amount', __( 'Payment link amount cannot exceed the remaining order amount.', 'payu-payment-links' ) );
+		}
 	}
 	$currency = $data['currency'];
 	$config   = payu_get_active_config_by_currency( $currency );
@@ -648,7 +660,7 @@ function payu_validate_currency_config_input( $post_data ) {
 	$currency = isset( $post_data['payu_config_currency'] ) ? sanitize_text_field( $post_data['payu_config_currency'] ) : '';
 	if ( empty( $currency ) ) {
 		$field_errors['payu_config_currency'] = __( 'Currency is required.', 'payu-payment-links' );
-	} elseif ( ! array_key_exists( $currency, get_woocommerce_currencies() ) ) {
+	} elseif ( ! array_key_exists( $currency, function_exists( 'payu_get_supported_currencies' ) ? payu_get_supported_currencies() : array() ) ) {
 		$field_errors['payu_config_currency'] = __( 'Invalid currency selected.', 'payu-payment-links' );
 	}
 

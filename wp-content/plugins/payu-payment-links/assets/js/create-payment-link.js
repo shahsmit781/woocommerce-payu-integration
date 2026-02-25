@@ -10,6 +10,7 @@
 
 	var i18n = (window.payuCreatePaymentLink && window.payuCreatePaymentLink.i18n) ? window.payuCreatePaymentLink.i18n : {};
 	var orderTotal = (window.payuCreatePaymentLink && window.payuCreatePaymentLink.orderTotal != null) ? parseFloat(window.payuCreatePaymentLink.orderTotal, 10) : 0;
+	var remainingPayable = (window.payuCreatePaymentLink && window.payuCreatePaymentLink.remainingPayable != null) ? parseFloat(window.payuCreatePaymentLink.remainingPayable, 10) : orderTotal;
 	var allowedCurrencies = (window.payuCreatePaymentLink && window.payuCreatePaymentLink.allowedCurrencies) ? window.payuCreatePaymentLink.allowedCurrencies : [];
 
 	function togglePartialFields(show) {
@@ -45,8 +46,8 @@
 		if (amount <= 0) {
 			errors.push(i18n.amountGreaterThanZero || 'Payment amount must be greater than zero.');
 		}
-		if (amount > orderTotal) {
-			errors.push(i18n.amountExceedOrderTotal || 'Payment amount must not exceed order total.');
+		if (amount > remainingPayable) {
+			errors.push(i18n.amountExceedRemaining || 'Payment link amount cannot exceed the remaining order amount.');
 		}
 		if (expiry !== '') {
 			var expiryTs = Date.parse(expiry);
@@ -86,6 +87,14 @@
 		var $form = $('#payu-create-payment-link-form');
 		if (!$form.length) {
 			return;
+		}
+
+		// Disable Create Payment Link button when no remaining amount (UI aligns with server-side; server is source of truth).
+		var $submitBtn = $('#payu-submit-create-link');
+		if ($submitBtn.length && remainingPayable <= 0) {
+			$submitBtn.prop('disabled', true).attr('aria-disabled', 'true');
+			var $notice = $('<p class="notice notice-warning" style="margin: 0.5em 0 0 0;"></p>').text(i18n.noRemainingAmount || 'No remaining amount to collect for this order.');
+			$submitBtn.closest('.submit').prepend($notice);
 		}
 
 		// Partial payment: show/hide min initial payment and number of instalments

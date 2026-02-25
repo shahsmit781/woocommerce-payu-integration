@@ -116,9 +116,17 @@ class PayU_Create_Payment_Link_Page {
 		if ( $amount <= 0 ) {
 			$errors[] = __( 'Payment amount must be greater than zero.', 'payu-payment-links' );
 		}
-		$order_total = (float) $order->get_total();
-		if ( $amount > $order_total ) {
-			$errors[] = __( 'Payment amount must not exceed order total.', 'payu-payment-links' );
+		// Remaining amount from latest DB state (order_total - sum of successful transactions).
+		$order_id = $order->get_id();
+		$remaining = 0.0;
+		if ( class_exists( 'PayU_Payment_Links_Repository' ) ) {
+			$data     = PayU_Payment_Links_Repository::get_remaining_payable_for_order( $order_id );
+			$remaining = (float) $data['remaining'];
+		} else {
+			$remaining = (float) $order->get_total();
+		}
+		if ( $amount > $remaining ) {
+			$errors[] = __( 'Payment link amount cannot exceed the remaining order amount.', 'payu-payment-links' );
 		}
 		$expiry = isset( $_POST['payu_expiry_date'] ) ? sanitize_text_field( wp_unslash( $_POST['payu_expiry_date'] ) ) : '';
 		if ( '' !== $expiry ) {
@@ -180,8 +188,23 @@ class PayU_Create_Payment_Link_Page {
 			);
 			return;
 		}
-		$link = payu_create_payment_link_api( $order, $data );
+		// Race condition: recheck remaining immediately before calling API (source of truth).
 		$order_id  = $order->get_id();
+		$requested = (float) $data['amount'];
+		if ( class_exists( 'PayU_Payment_Links_Repository' ) ) {
+			$remaining_data = PayU_Payment_Links_Repository::get_remaining_payable_for_order( $order_id );
+			$remaining      = (float) $remaining_data['remaining'];
+			if ( $requested > $remaining ) {
+				add_settings_error(
+					'payu_create_payment_link',
+					'amount_exceeds_remaining',
+					__( 'Payment link amount cannot exceed the remaining order amount.', 'payu-payment-links' ),
+					'error'
+				);
+				return;
+			}
+		}
+		$link = payu_create_payment_link_api( $order, $data );
 		$back_url  = $this->get_order_edit_url( $order_id );
 		if ( is_wp_error( $link ) ) {
 			add_settings_error(
@@ -273,12 +296,19 @@ class PayU_Create_Payment_Link_Page {
 		);
 		$order_id = isset( $_GET['order_id'] ) ? absint( $_GET['order_id'] ) : 0;
 		$order_total = 0;
+		$remaining_payable = 0;
 		$allowed_currencies = array();
 		if ( $order_id ) {
 			$order = wc_get_order( $order_id );
 			if ( $order && $order->get_id() ) {
 				$order_total = (float) $order->get_total();
 				$allowed_currencies = function_exists( 'payu_get_active_payu_currencies' ) ? array_keys( payu_get_active_payu_currencies() ) : array();
+				if ( class_exists( 'PayU_Payment_Links_Repository' ) ) {
+					$data = PayU_Payment_Links_Repository::get_remaining_payable_for_order( $order_id );
+					$remaining_payable = (float) $data['remaining'];
+				} else {
+					$remaining_payable = $order_total;
+				}
 			}
 		}
 		wp_localize_script(
@@ -286,10 +316,13 @@ class PayU_Create_Payment_Link_Page {
 			'payuCreatePaymentLink',
 			array(
 				'orderTotal'        => $order_total,
+				'remainingPayable'  => $remaining_payable,
 				'allowedCurrencies' => $allowed_currencies,
 				'i18n'              => array(
 					'amountGreaterThanZero'   => __( 'Payment amount must be greater than zero.', 'payu-payment-links' ),
 					'amountExceedOrderTotal'  => __( 'Payment amount must not exceed order total.', 'payu-payment-links' ),
+					'amountExceedRemaining'   => __( 'Payment link amount cannot exceed the remaining order amount.', 'payu-payment-links' ),
+					'noRemainingAmount'       => __( 'No remaining amount to collect for this order.', 'payu-payment-links' ),
 					'expiryMustBeFuture'      => __( 'Expiry date must be in the future.', 'payu-payment-links' ),
 					'selectValidCurrency'     => __( 'Please select a valid currency from PayU configurations.', 'payu-payment-links' ),
 					'customerEmailRequired'   => __( 'A valid customer email is required.', 'payu-payment-links' ),

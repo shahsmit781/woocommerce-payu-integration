@@ -15,7 +15,7 @@ defined('ABSPATH') || exit;
  */
 function payu_render_configuration_form_template()
 {
-	$currencies = get_woocommerce_currencies();
+	$currencies = function_exists( 'payu_get_supported_currencies' ) ? payu_get_supported_currencies() : array();
 ?>
 	<div id="payu-add-configuration-form" class="payu-add-configuration-form" role="region" aria-labelledby="payu-add-config-heading">
 		<h3 id="payu-add-config-heading"><?php esc_html_e('Add New Currency Configuration', 'payu-payment-links'); ?></h3>
