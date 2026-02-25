@@ -119,13 +119,14 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 		if ( isset( $_GET['section'] ) && 'payu_payment_links' === $_GET['section'] ) {
 			$plugin_url = plugin_dir_url( dirname( __FILE__ ) );
 			$version    = defined( 'PAYU_PAYMENT_LINKS_VERSION' ) ? PAYU_PAYMENT_LINKS_VERSION : '1.0.0';
+			$ver        = $version . '.' . time();
 
 			// Enqueue CSS file
 			wp_enqueue_style(
 				'payu-payment-links-admin',
 				$plugin_url . 'assets/css/admin.css',
 				array( 'woocommerce_admin_styles' ),
-				$version
+				$ver
 			);
 
 			// Enqueue JavaScript file
@@ -133,7 +134,7 @@ class WC_Gateway_Payu_Payment_Links extends WC_Payment_Gateway {
 				'payu-payment-links-admin',
 				$plugin_url . 'assets/js/admin.js',
 				array( 'jquery' ),
-				$version,
+				$ver,
 				true
 			);
 

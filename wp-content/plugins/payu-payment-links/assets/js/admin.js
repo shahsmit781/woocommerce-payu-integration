@@ -69,9 +69,9 @@
 		if ($notice.attr('id') === 'payu-edit-ajax-error') {
 			$notice.removeClass('payu-edit-message-visible notice-error notice-success');
 			$notice.removeAttr('style');
+			$notice.css({ display: 'none', visibility: 'hidden' });
 			$notice.find('p').empty();
 			$notice.find('.notice-dismiss').remove();
-			$notice.hide();
 			return;
 		}
 		$notice.fadeOut();
@@ -993,7 +993,14 @@
 
 			$form.find('.payu-field-error-container').empty();
 			$form.find('.payu-field-invalid').removeClass('payu-field-invalid');
-			$ajaxError.hide().find('p').empty();
+			// Fully hide and reset AJAX error box (inline display:block !important / visibility:visible would otherwise keep it visible)
+			if ($ajaxError.length) {
+				$ajaxError.removeClass('payu-edit-message-visible notice-error notice-success').removeAttr('style').css({ display: 'none', visibility: 'hidden' });
+				$ajaxError.find('p').empty();
+				$ajaxError.find('.notice-dismiss').remove();
+			}
+			// Hide PHP-rendered notice (from payu_config_error redirect) so only one error surface is shown
+			$form.closest('.payu-edit-wrapper').find('.notice.notice-error').not('#payu-edit-ajax-error').hide();
 
 			if (!validateEditMerchantId()) {
 				isValid = false;
@@ -1045,14 +1052,28 @@
 				$btn.prop('disabled', false);
 			}
 
+			function hideEditAjaxError() {
+				var $err = $form.find('#payu-edit-ajax-error');
+				if ($err.length) {
+					$err.removeClass('payu-edit-message-visible notice-error notice-success').removeAttr('style').css({ display: 'none', visibility: 'hidden' });
+					$err.find('p').empty();
+					$err.find('.notice-dismiss').remove();
+				}
+			}
+
 			$.ajax({
 				url: typeof payuAjaxData !== 'undefined' ? payuAjaxData.ajaxUrl : '',
 				type: 'POST',
 				data: data,
 				dataType: 'json',
 				success: function (response) {
-					if (response && response.success && response.data && response.data.redirect) {
-						window.location.href = response.data.redirect;
+					if (response && response.success) {
+						hideEditAjaxError();
+						if (response.data && response.data.redirect) {
+							window.location.href = response.data.redirect;
+							return;
+						}
+						resetSubmitState();
 						return;
 					}
 					var msg = 'Update failed.';
@@ -1107,6 +1128,18 @@
 		}
 		if (changed) {
 			window.history.replaceState({}, document.title, url.toString());
+		}
+
+		// Edit config page: ensure AJAX error box is hidden on first load / before first click
+		if ($('#payu-edit-config-form').length) {
+			var $editAjaxErr = $('#payu-edit-ajax-error');
+			if ($editAjaxErr.length) {
+				$editAjaxErr.removeClass('payu-edit-message-visible notice-error notice-success');
+				$editAjaxErr.removeAttr('style');
+				$editAjaxErr.css({ display: 'none', visibility: 'hidden' });
+				$editAjaxErr.find('p').empty();
+				$editAjaxErr.find('.notice-dismiss').remove();
+			}
 		}
 	});
 

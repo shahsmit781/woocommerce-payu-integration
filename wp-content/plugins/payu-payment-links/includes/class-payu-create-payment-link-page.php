@@ -257,17 +257,18 @@ class PayU_Create_Payment_Link_Page {
 			return;
 		}
 		$plugin_url = plugin_dir_url( dirname( __FILE__ ) );
+		$ver        = ( defined( 'PAYU_PAYMENT_LINKS_VERSION' ) ? PAYU_PAYMENT_LINKS_VERSION : '1.0.0' ) . '.' . time();
 		wp_enqueue_style(
 			'payu-create-payment-link',
 			$plugin_url . 'assets/css/create-payment-link.css',
 			array( 'woocommerce_admin_styles' ),
-			PAYU_PAYMENT_LINKS_VERSION
+			$ver
 		);
 		wp_enqueue_script(
 			'payu-create-payment-link',
 			$plugin_url . 'assets/js/create-payment-link.js',
 			array( 'jquery' ),
-			PAYU_PAYMENT_LINKS_VERSION,
+			$ver,
 			true
 		);
 		$order_id = isset( $_GET['order_id'] ) ? absint( $_GET['order_id'] ) : 0;

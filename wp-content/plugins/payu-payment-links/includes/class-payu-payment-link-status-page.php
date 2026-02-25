@@ -119,7 +119,7 @@ class PayU_Payment_Link_Status_Page {
 			$url = '';
 		}
 		if ( $url ) {
-			wp_enqueue_script( $handle, $url, array( 'jquery' ), PAYU_PAYMENT_LINKS_VERSION, true );
+			wp_enqueue_script( $handle, $url, array( 'jquery' ), ( defined( 'PAYU_PAYMENT_LINKS_VERSION' ) ? PAYU_PAYMENT_LINKS_VERSION : '1.0.0' ) . '.' . time(), true );
 			wp_localize_script( $handle, 'payuStatusPage', array(
 				'ajaxUrl'    => $ajax_url,
 				'action'     => $ajax_action,

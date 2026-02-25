@@ -172,8 +172,9 @@
 		var displayStatus = (data.display_status || '').toUpperCase();
 		var isPartial = displayStatus === 'PARTIALLY_PAID';
 		var isPaid = displayStatus === 'PAID';
-		var showTable = (isPartial && txns.length >= 1) || (!isPaid && txns.length > 1);
-		var showSingle = (isPaid && txns.length >= 1) || (txns.length === 1 && !isPartial);
+		// Partial: always table. Full payment: table if more than one transaction; single-row display if exactly one.
+		var showTable = (isPartial && txns.length >= 1) || (txns.length > 1);
+		var showSingle = isPaid && txns.length === 1;
 
 		if (showTable) {
 			html += '<div class="payu-status-txn-block"><div class="payu-status-txn-heading">' + (i18n.paymentTxns || 'Payment transactions') + '</div><table class="payu-status-txn-table" role="table" aria-label="' + (i18n.paymentTxns || 'Payment transactions') + '"><thead><tr><th scope="col">' + (i18n.dateTime || 'Date & time') + '</th><th scope="col">' + (i18n.transactionId || 'Transaction ID') + '</th><th scope="col">' + (i18n.amount || 'Amount') + '</th><th scope="col">' + (i18n.txnStatus || 'Transaction status') + '</th></tr></thead><tbody>';

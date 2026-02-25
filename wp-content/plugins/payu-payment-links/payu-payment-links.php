@@ -392,3 +392,17 @@ add_action( 'plugins_loaded', 'payu_payment_links_load_gateway', 99 );
 // Add gateway to WooCommerce payment gateways list
 // Priority 100 ensures gateway class is loaded before this filter runs
 add_filter( 'woocommerce_payment_gateways', 'payu_payment_links_add_gateway', 100 );
+
+register_activation_hook( __FILE__, 'payu_payment_links_activation_check' );
+
+function payu_payment_links_activation_check() {
+
+    if ( ! class_exists( 'WooCommerce' ) ) {
+
+        deactivate_plugins( plugin_basename( __FILE__ ) );
+
+        wp_die(
+            'PayU Payment Links requires WooCommerce to be installed and active.'
+        );
+    }
+}

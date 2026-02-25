@@ -141,9 +141,10 @@
 	margin-right: 0;
 }
 
-/* Edit form AJAX message – hidden by default */
+/* Edit form AJAX message – hidden when not shown (no .payu-edit-message-visible) */
 #payu-edit-ajax-error.payu-edit-ajax-message:not(.payu-edit-message-visible) {
 	display: none !important;
+	visibility: hidden !important;
 	margin: 0;
 	padding: 0;
 	border: none;
