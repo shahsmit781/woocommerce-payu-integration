@@ -316,8 +316,8 @@ function payu_payment_links_declare_hpos_compatibility() {
 	}
 }
 
-// Register activation hook to create database table on plugin activation
-register_activation_hook( PAYU_PAYMENT_LINKS_PLUGIN_FILE, 'payu_payment_links_create_db' );
+// Register activation hook: require WooCommerce, then create/update DB tables
+register_activation_hook( PAYU_PAYMENT_LINKS_PLUGIN_FILE, 'payu_payment_links_on_activation' );
 
 // Declare HPOS compatibility (must be before WooCommerce init)
 add_action( 'before_woocommerce_init', 'payu_payment_links_declare_hpos_compatibility' );
@@ -393,16 +393,13 @@ add_action( 'plugins_loaded', 'payu_payment_links_load_gateway', 99 );
 // Priority 100 ensures gateway class is loaded before this filter runs
 add_filter( 'woocommerce_payment_gateways', 'payu_payment_links_add_gateway', 100 );
 
-register_activation_hook( __FILE__, 'payu_payment_links_activation_check' );
-
-function payu_payment_links_activation_check() {
-
-    if ( ! class_exists( 'WooCommerce' ) ) {
-
-        deactivate_plugins( plugin_basename( __FILE__ ) );
-
-        wp_die(
-            'PayU Payment Links requires WooCommerce to be installed and active.'
-        );
-    }
+/**
+ * Run on plugin activation: require WooCommerce, then create/update DB tables and flush rewrites.
+ */
+function payu_payment_links_on_activation() {
+	if ( ! class_exists( 'WooCommerce' ) ) {
+		deactivate_plugins( plugin_basename( PAYU_PAYMENT_LINKS_PLUGIN_FILE ) );
+		wp_die( __( 'PayU Payment Links requires WooCommerce to be installed and active.', 'payu-payment-links' ) );
+	}
+	payu_payment_links_create_db();
 }
