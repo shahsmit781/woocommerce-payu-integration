@@ -137,7 +137,7 @@ class PayU_Order_Payment_Link {
 		return false;
 	}
 
-	/**
+	/**	
 	 * Register the meta box on order edit screens (legacy and HPOS).
 	 *
 	 * @param string   $screen_id Screen ID (shop_order or woocommerce_page_wc-orders).

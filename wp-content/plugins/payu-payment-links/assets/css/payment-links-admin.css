@@ -1,0 +1,225 @@
+/* =========================================================
+   BASE TABLE LAYOUT
+   ========================================================= */
+
+/* Allow horizontal scroll if table overflows */
+/* .wrap .wp-list-table {
+	display: block;
+	overflow-x: auto;
+	white-space: nowrap;
+} */
+
+/* Vertical alignment */
+.wp-list-table td,
+.wp-list-table th {
+	vertical-align: middle;
+}
+
+/* =========================================================
+   COLUMN WIDTHS
+   ========================================================= */
+
+.wp-list-table th.column-payment_link,
+.wp-list-table td.column-payment_link {
+	min-width: 260px;
+	max-width: 340px;
+}
+
+.wp-list-table th.column-actions,
+.wp-list-table td.column-actions {
+	width: 110px;
+	max-width: 110px;
+	text-align: center;
+}
+
+/* =========================================================
+   PAYMENT LINK 
+   ========================================================= */
+
+.payu-payment-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	max-width: 100%;
+}
+
+.payu-link-text {
+	max-width: 300px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #2271b1;
+	text-decoration: none;
+}
+
+.payu-link-text:hover {
+	text-decoration: underline;
+}
+
+/* Copy icon */
+.payu-copy-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	background: #fff;
+	cursor: pointer;
+}
+
+.payu-copy-btn:hover {
+	background: #f6f7f7;
+}
+
+.payu-copy-btn .dashicons {
+	font-size: 16px;
+}
+
+/* =========================================================
+   ACTION COLUMN (DESKTOP)
+   ========================================================= */
+
+.payu-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: nowrap;
+	position: relative;
+}
+
+/* Action buttons (icon-only) */
+.payu-action-btn {
+	display: inline-flex !important;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	background: #fff;
+	color: #2271b1;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.payu-action-btn:hover {
+	background: #f6f7f7;
+}
+
+/* Hide text labels on desktop */
+.payu-action-btn .label {
+	display: none !important;
+}
+
+/* Expire button emphasis */
+.payu-action-btn.expire {
+	border-color: #b32d2e;
+	color: #b32d2e;
+}
+
+/* =========================================================
+   ACTION TOGGLE (MOBILE)
+   ========================================================= */
+
+.payu-actions-toggle {
+	display: none;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	padding: 4px;
+}
+
+.payu-actions-toggle .dashicons {
+	font-size: 18px;
+}
+
+/* =========================================================
+   RESPONSIVE BREAKPOINTS
+   ========================================================= */
+
+/* xxl ≥1400px */
+@media (min-width: 1400px) {
+	.payu-link-text {
+		max-width: 340px;
+	}
+}
+
+/* xl ≥1200px */
+@media (max-width: 1399px) {
+	.payu-link-text {
+		max-width: 300px;
+	}
+}
+
+/* lg ≥992px */
+@media (max-width: 1199px) {
+	.payu-link-text {
+		max-width: 260px;
+	}
+}
+
+/* md ≥768px */
+@media (max-width: 991px) {
+	.payu-link-text {
+		max-width: 220px;
+	}
+}
+
+/* sm + xs <768px */
+@media (max-width: 767px) {
+
+	/* Hide inline action icons */
+	.payu-action-btn {
+		display: none !important;
+	}
+
+	/* Show toggle */
+	.payu-actions-toggle {
+		display: inline-flex;
+	}
+
+	/* Dropdown container */
+	.payu-actions.open {
+		z-index: 9999;
+	}
+
+	/* Dropdown actions */
+	.payu-actions.open .payu-action-btn {
+		display: flex !important;
+		position: absolute;
+		right: 0;
+		top: 100%;
+		margin-top: 4px;
+		background: #fff;
+		border: 1px solid #ccd0d4;
+		padding: 6px;
+		flex-direction: column;
+		gap: 6px;
+
+		/* Scrollable if many actions */
+		max-height: 160px;
+		overflow-y: auto;
+	}
+
+	/* Show labels in mobile dropdown */
+	.payu-actions.open .payu-action-btn .label {
+		display: inline !important;
+	}
+
+	/* Shorter payment link on mobile */
+	.payu-link-text {
+		max-width: 140px;
+	}
+}
+
+/* =========================================================
+   SMALL POLISH
+   ========================================================= */
+
+.payu-action-btn.loading {
+	opacity: 0.6;
+	pointer-events: none;
+}
