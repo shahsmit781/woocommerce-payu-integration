@@ -33,7 +33,7 @@ class PayU_Create_Payment_Link_Page {
 	 */
 	public function register_page() {
 		add_submenu_page(
-			null,
+			'woocommerce',
 			__( 'Create PayU Payment Link', 'payu-payment-links' ),
 			__( 'Create Payment Link', 'payu-payment-links' ),
 			'manage_woocommerce',
