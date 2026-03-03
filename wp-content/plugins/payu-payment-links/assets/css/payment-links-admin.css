@@ -2,12 +2,11 @@
    BASE TABLE LAYOUT
    ========================================================= */
 
-/* Allow horizontal scroll if table overflows */
-/* .wrap .wp-list-table {
-	display: block;
-	overflow-x: auto;
-	white-space: nowrap;
-} */
+/* Table full width; auto layout so column min-widths are respected */
+.wrap.woocommerce .wp-list-table {
+	width: 100%;
+	table-layout: auto;
+}
 
 /* Vertical alignment */
 .wp-list-table td,
@@ -15,21 +14,30 @@
 	vertical-align: middle;
 }
 
+/* Filter row: ensure status and environment selects show all options */
+.wrap.woocommerce .tablenav.top .alignleft.actions select[name="status"],
+.wrap.woocommerce .tablenav.top .alignleft.actions select[name="environment"] {
+	min-width: 140px;
+}
+
 /* =========================================================
    COLUMN WIDTHS
    ========================================================= */
 
-.wp-list-table th.column-payment_link,
-.wp-list-table td.column-payment_link {
+.wp-list-table th.column-payment_link_url,
+.wp-list-table td.column-payment_link_url {
 	min-width: 260px;
 	max-width: 340px;
 }
 
+/* Action column: 4 icon buttons (28px) + gaps = ~150px min */
 .wp-list-table th.column-actions,
 .wp-list-table td.column-actions {
-	width: 110px;
-	max-width: 110px;
+	width: 160px;
+	min-width: 160px;
+	white-space: nowrap;
 	text-align: center;
+	box-sizing: border-box;
 }
 
 /* =========================================================
@@ -87,6 +95,7 @@
 	gap: 6px;
 	flex-wrap: nowrap;
 	position: relative;
+	min-width: 130px; /* 4 buttons × 28px + 3 gaps × 6px */
 }
 
 /* Action buttons (icon-only) */
@@ -222,4 +231,245 @@
 .payu-action-btn.loading {
 	opacity: 0.6;
 	pointer-events: none;
+}
+
+/* =========================================================
+   EXPIRY MODAL
+   ========================================================= */
+
+.payu-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 100000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+	box-sizing: border-box;
+}
+
+.payu-modal[hidden] {
+	display: none !important;
+}
+
+body.payu-modal-open {
+	overflow: hidden;
+}
+
+.payu-modal-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.6);
+	cursor: pointer;
+}
+
+.payu-modal-content {
+	position: relative;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+	border-radius: 4px;
+	padding: 20px 24px;
+	max-width: 420px;
+	width: 100%;
+}
+
+.payu-modal-title {
+	margin: 0 0 8px;
+	font-size: 1.25rem;
+}
+
+.payu-modal-description {
+	margin: 0 0 16px;
+	color: #50575e;
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.payu-modal-error {
+	margin: 0 0 12px;
+	padding: 8px 12px;
+	background: #fcf0f1;
+	border-left: 4px solid #d63638;
+	color: #d63638;
+	font-size: 13px;
+}
+
+.payu-modal-field {
+	margin: 0 0 16px;
+}
+
+.payu-modal-field label {
+	display: block;
+	margin-bottom: 4px;
+	font-weight: 600;
+}
+
+.payu-modal-field input[type="datetime-local"] {
+	width: 100%;
+	max-width: 280px;
+}
+
+.payu-modal-actions {
+	margin: 0;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.payu-expiry-spinner {
+	display: inline-block;
+	width: 20px;
+	height: 20px;
+	border: 2px solid #c3c4c7;
+	border-top-color: #2271b1;
+	border-radius: 50%;
+	animation: payu-spin 0.7s linear infinite;
+}
+
+.payu-expiry-spinner.is-hidden {
+	display: none !important;
+}
+
+@keyframes payu-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Expiry column: date + edit icon (when status is not PAID) */
+.payu-expiry-display {
+	display: inline-block;
+	vertical-align: middle;
+}
+
+.payu-expiry-edit-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	vertical-align: middle;
+	margin-left: 4px;
+	padding: 2px;
+	border: none;
+	background: none;
+	color: #2271b1;
+	cursor: pointer;
+	border-radius: 2px;
+}
+
+.payu-expiry-edit-btn:hover {
+	color: #135e96;
+	background: #f0f0f1;
+}
+
+.payu-expiry-edit-btn .dashicons {
+	font-size: 16px;
+	width: 16px;
+	height: 16px;
+}
+
+/* Hide expire button when link status is EXPIRED (after inline update) */
+.payu-expiry-edit-btn.payu-expire-btn-hidden {
+	display: none;
+}
+
+/* Export CSV: same row as Filter, visually grouped */
+.payu-export-csv-btn {
+	margin-left: 8px;
+	vertical-align: middle;
+}
+
+/* Brief highlight when expiry cell is updated via AJAX (no page reload) */
+.wp-list-table td.column-expiry_date.payu-cell-updated {
+	background-color: #f0f6fc;
+	transition: background-color 0.3s ease;
+}
+
+/* =========================================================
+   RESEND MODAL
+   ========================================================= */
+
+.payu-resend-modal-content .payu-modal-field select,
+.payu-resend-modal-content .payu-modal-field input[type="email"],
+.payu-resend-modal-content .payu-modal-field input[type="tel"] {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.payu-resend-field-phone .description {
+	display: block;
+	margin-top: 4px;
+	font-size: 12px;
+	color: #646970;
+}
+
+.payu-resend-checkboxes {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.payu-resend-checkbox-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.payu-resend-checkbox-label input[type="checkbox"] {
+	width: 18px;
+	height: 18px;
+	margin: 0;
+}
+
+.payu-resend-spinner {
+	display: inline-block;
+	width: 20px;
+	height: 20px;
+	border: 2px solid #c3c4c7;
+	border-top-color: #2271b1;
+	border-radius: 50%;
+	animation: payu-spin 0.7s linear infinite;
+}
+
+.payu-resend-spinner.is-hidden {
+	display: none !important;
+}
+
+/* Full overlay inside resend modal while API request is in progress */
+.payu-resend-loading-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	background: rgba(255, 255, 255, 0.92);
+	border-radius: 4px;
+}
+
+.payu-resend-loading-overlay[hidden] {
+	display: none !important;
+}
+
+.payu-resend-loading-spinner {
+	display: block;
+	width: 40px;
+	height: 40px;
+	border: 3px solid #c3c4c7;
+	border-top-color: #2271b1;
+	border-radius: 50%;
+	animation: payu-spin 0.7s linear infinite;
+}
+
+.payu-resend-loading-text {
+	margin: 0;
+	font-size: 14px;
+	color: #1d2327;
+	font-weight: 500;
 }

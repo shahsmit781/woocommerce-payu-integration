@@ -310,29 +310,18 @@ function payu_payment_links_load_gateway() {
 
 	if ( is_admin() ) {
 
-		// Load repository (data layer)
-		// $repository_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payment-links/repository/class-payu-payment-links-repository.php';
-		// if ( file_exists( $repository_file ) ) {
-		// 	require_once $repository_file;
-		// }
+		// Load actions handler (AJAX: update expiry, etc.)
+		$actions_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payment-links/admin/class-payu-payment-links-actions.php';
+		if ( file_exists( $actions_file ) ) {
+			require_once $actions_file;
+			new PayU_Payment_Links_Actions();
+		}
 
-		// // Load list table (UI table)
-		// $list_table_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payment-links/admin/class-payu-payment-links-list-table.php';
-		// if ( file_exists( $list_table_file ) ) {
-		// 	require_once $list_table_file;
-		// }
-
-		// // Load actions handler (AJAX / row actions)
-		// $actions_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payment-links/admin/class-payu-payment-links-actions.php';
-		// if ( file_exists( $actions_file ) ) {
-		// 	require_once $actions_file;
-		// }
-
-		// // Load export handler
-		// $export_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payment-links/exports/class-payu-payment-links-export.php';
-		// if ( file_exists( $export_file ) ) {
-		// 	require_once $export_file;
-		// }
+		// Modals (resend modal view)
+		$modals_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payment-links/admin/class-payu-payment-links-modals.php';
+		if ( file_exists( $modals_file ) ) {
+			require_once $modals_file;
+		}
 
 		// Load Assets File
 		$asset_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payment-links/admin/class-payu-payment-links-assets.php';
@@ -346,6 +335,13 @@ function payu_payment_links_load_gateway() {
 		if ( file_exists( $menu_file ) ) {
 			require_once $menu_file;
 			new PayU_Payment_Links_Menu();
+		}
+
+		// CSV export
+		$export_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payment-links/exports/class-payu-payment-links-export.php';
+		if ( file_exists( $export_file ) ) {
+			require_once $export_file;
+			new PayU_Payment_Links_Export();
 		}
 	}
 }

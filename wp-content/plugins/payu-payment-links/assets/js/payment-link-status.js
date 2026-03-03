@@ -80,12 +80,12 @@
 
 	function statusLabel(displayStatus) {
 		var s = (displayStatus || '').toUpperCase();
-		if (s === 'PAID') return i18n.paid || 'Full payment completed';
-		if (s === 'PARTIALLY_PAID') return i18n.partial || 'Partial payment received';
+		if (s === 'PAID') return i18n.paid || 'Paid';
+		if (s === 'PARTIALLY_PAID') return i18n.partial || 'Partial paid';
 		if (s === 'FAILED') return i18n.failed || 'Payment failed';
-		if (s === 'ACTIVE') return i18n.active || 'Payment pending';
+		if (s === 'ACTIVE') return i18n.active || 'Pending';
 		if (s === 'EXPIRED') return i18n.expired || 'Payment link expired';
-		return i18n.active || 'Payment pending';
+		return i18n.pending || i18n.active || 'Pending';
 	}
 
 	function statusClass(displayStatus) {
@@ -109,7 +109,8 @@
 		if (amount === null || amount === undefined || amount === '') return '—';
 		var num = parseFloat(amount, 10);
 		if (isNaN(num)) return '—';
-		return num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+		var formatted = num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+		return (currency ? (currency + ' ') : '') + formatted;
 	}
 
 	function renderDetails(data) {

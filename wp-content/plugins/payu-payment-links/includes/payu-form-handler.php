@@ -10,6 +10,23 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
+ * Get WooCommerce order edit URL (HPOS or legacy).
+ *
+ * @param int $order_id Order ID.
+ * @return string Admin URL to edit the order.
+ */
+function payu_get_order_edit_url( $order_id ) {
+	$order_id = absint( $order_id );
+	if ( ! $order_id ) {
+		return '';
+	}
+	if ( function_exists( 'wc_get_container' ) && class_exists( 'Automattic\WooCommerce\Utilities\OrderUtil' ) && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled() ) {
+		return admin_url( 'admin.php?page=wc-orders&action=edit&id=' . $order_id );
+	}
+	return admin_url( 'post.php?post=' . $order_id . '&action=edit' );
+}
+
+/**
  * Handle delete configuration request (soft delete via GET + nonce).
  * Runs on admin_init; redirects back to PayU settings on success.
  *

@@ -30,14 +30,22 @@ switch ( $quick ) {
 		break;
 
 	default:
-		$date_from = esc_attr( $_GET['date_from'] ?? $today );
-		$date_to   = esc_attr( $_GET['date_to'] ?? $today );
+		$date_from = sanitize_text_field( $_GET['date_from'] ?? $today );
+		$date_to   = sanitize_text_field( $_GET['date_to'] ?? $today );
+		break;
 }
 
-$status      = esc_attr( $_GET['status'] ?? '' );
-$currency    = esc_attr( $_GET['currency'] ?? '' );
-$order_id    = esc_attr( $_GET['order_id'] ?? '' );
-$environment = esc_attr( $_GET['environment'] ?? '' );
+$status      = isset( $_GET['status'] ) ? sanitize_text_field( wp_unslash( $_GET['status'] ) ) : '';
+$currency    = isset( $_GET['currency'] ) ? sanitize_text_field( wp_unslash( $_GET['currency'] ) ) : '';
+$order_id    = isset( $_GET['order_id'] ) ? sanitize_text_field( wp_unslash( $_GET['order_id'] ) ) : '';
+$environment = isset( $_GET['environment'] ) ? sanitize_text_field( wp_unslash( $_GET['environment'] ) ) : '';
+
+$has_filters = ! empty( $_GET['status'] )
+	|| ! empty( $_GET['currency'] )
+	|| ! empty( $_GET['order_id'] )
+	|| ! empty( $_GET['environment'] )
+	|| ! empty( $_GET['date_from'] )
+	|| ! empty( $_GET['date_to'] );
 ?>
 
 <ul class="subsubsub">
@@ -110,12 +118,23 @@ foreach ( $quick_ranges as $range ) {
 		<input type="date" name="date_from" value="<?php echo esc_attr( $date_from ); ?>" />
 		<input type="date" name="date_to" value="<?php echo esc_attr( $date_to ); ?>" />
 
-		<select name="status">
+		<select name="status" id="payu-filter-status" aria-label="<?php esc_attr_e( 'Filter by payment status', 'payu-payment-links' ); ?>">
 			<option value=""><?php esc_html_e( 'All statuses', 'payu-payment-links' ); ?></option>
-			<option value="PENDING" <?php selected( $status, 'PENDING' ); ?>>PENDING</option>
-			<option value="PAID" <?php selected( $status, 'PAID' ); ?>>PAID</option>
-			<option value="FAILED" <?php selected( $status, 'FAILED' ); ?>>FAILED</option>
-			<option value="EXPIRED" <?php selected( $status, 'EXPIRED' ); ?>>EXPIRED</option>
+			<?php
+			$status_options = [
+				'PENDING'        => __( 'Pending', 'payu-payment-links' ),
+				'PARTIALLY_PAID' => __( 'Partial paid', 'payu-payment-links' ),
+				'PAID'           => __( 'Paid', 'payu-payment-links' )
+			];
+			foreach ( $status_options as $value => $label ) {
+				printf(
+					'<option value="%s"%s>%s</option>',
+					esc_attr( $value ),
+					selected( $status, $value, false ),
+					esc_html( $label )
+				);
+			}
+			?>
 		</select>
 
 		<input
@@ -136,11 +155,42 @@ foreach ( $quick_ranges as $range ) {
 
 		<select name="environment">
 			<option value=""><?php esc_html_e( 'All environments', 'payu-payment-links' ); ?></option>
-			<option value="UAT" <?php selected( $environment, 'UAT' ); ?>>UAT</option>
-			<option value="PRODUCTION" <?php selected( $environment, 'PRODUCTION' ); ?>>Production</option>
+			<option value="uat" <?php selected( $environment, 'uat' ); ?>><?php esc_html_e( 'UAT', 'payu-payment-links' ); ?></option>
+			<option value="prod" <?php selected( $environment, 'prod' ); ?>><?php esc_html_e( 'Production', 'payu-payment-links' ); ?></option>
 		</select>
 
 		<?php submit_button( __( 'Filter', 'payu-payment-links' ), 'button', 'filter_action', false ); ?>
+
+		<?php if ( $has_filters ) : ?>
+			<a href="<?php echo esc_url( admin_url( 'admin.php?page=payu-payment-links' ) ); ?>" class="button button-secondary"><?php esc_html_e( 'Reset', 'payu-payment-links' ); ?></a>
+		<?php endif; ?>
+
+		<?php
+		$export_date_valid = ! empty( $date_from ) && ! empty( $date_to ) && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date_from ) && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date_to );
+		if ( $export_date_valid && class_exists( 'PayU_Payment_Links_Export' ) ) :
+			$export_args = array(
+				'page'      => 'payu-payment-links',
+				'export'    => 'csv',
+				'_wpnonce'  => wp_create_nonce( PayU_Payment_Links_Export::get_nonce_action() ),
+				'date_from' => $date_from,
+				'date_to'   => $date_to,
+			);
+			if ( '' !== $status ) {
+				$export_args['status'] = $status;
+			}
+			if ( '' !== $currency ) {
+				$export_args['currency'] = $currency;
+			}
+			if ( '' !== $order_id ) {
+				$export_args['order_id'] = $order_id;
+			}
+			if ( '' !== $environment ) {
+				$export_args['environment'] = $environment;
+			}
+			$export_url = add_query_arg( $export_args, admin_url( 'admin.php' ) );
+			?>
+			<a href="<?php echo esc_url( $export_url ); ?>" class="button payu-export-csv-btn"><?php esc_html_e( 'Export CSV', 'payu-payment-links' ); ?></a>
+		<?php endif; ?>
 
 	</div>
 </div>

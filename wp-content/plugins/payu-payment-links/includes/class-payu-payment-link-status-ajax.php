@@ -124,7 +124,7 @@ class PayU_Payment_Link_Status_Ajax {
 		$response = wp_remote_get(
 			$url,
 			array(
-				'timeout' => 15,
+				'timeout' => 35,
 				'headers' => array(
 					'Accept'        => 'application/json',
 					'Authorization' => 'Bearer ' . $token,
@@ -154,7 +154,7 @@ class PayU_Payment_Link_Status_Ajax {
 			$response = wp_remote_get(
 				$url,
 				array(
-					'timeout' => 15,
+					'timeout' => 35,
 					'headers' => array(
 						'Accept'        => 'application/json',
 						'Authorization' => 'Bearer ' . $token,
@@ -232,6 +232,158 @@ class PayU_Payment_Link_Status_Ajax {
 	}
 
 	/**
+	 * Refresh a single payment link from PayU by internal DB id (admin listing).
+	 * Fetches Get Single Payment Link + Transactions API, updates DB, returns row data for UI.
+	 * Does not require transactions to be present (unlike fetch_and_persist_payment_link_status).
+	 *
+	 * @param int $payment_link_id Internal payment link row ID.
+	 * @return array|WP_Error On success: array( payment_link_id, status, paid_amount, amount, expiry_date, currency ). Otherwise WP_Error.
+	 */
+	public static function refresh_by_payment_link_id( $payment_link_id ) {
+		$payment_link_id = absint( $payment_link_id );
+		if ( $payment_link_id <= 0 ) {
+			return new WP_Error( 'invalid_id', __( 'Invalid payment link ID.', 'payu-payment-links' ) );
+		}
+
+		if ( ! class_exists( 'Payment_Links_Repository' ) ) {
+			$repo_file = defined( 'PAYU_PAYMENT_LINKS_PLUGIN_DIR' ) ? PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'includes/payment-links/repository/class-payment-links-repository.php' : '';
+			if ( $repo_file && file_exists( $repo_file ) ) {
+				require_once $repo_file;
+			}
+		}
+		if ( ! class_exists( 'Payment_Links_Repository' ) ) {
+			return new WP_Error( 'no_repo', __( 'Payment links repository not available.', 'payu-payment-links' ) );
+		}
+
+		$repo = new Payment_Links_Repository();
+		$link = $repo->get_link_by_id( $payment_link_id );
+		if ( ! $link || empty( $link->payu_invoice_number ) ) {
+			return new WP_Error( 'no_link', __( 'Payment link not found.', 'payu-payment-links' ) );
+		}
+
+		$config = null;
+		if ( ! empty( $link->config_id ) && function_exists( 'payu_get_currency_config_by_id' ) ) {
+			$config = payu_get_currency_config_by_id( $link->config_id );
+		}
+		if ( ( ! $config || empty( $config->merchant_id ) ) && ! empty( $link->currency ) && function_exists( 'payu_get_active_config_by_currency' ) ) {
+			$config = payu_get_active_config_by_currency( $link->currency );
+		}
+		if ( ( ! $config || empty( $config->merchant_id ) ) && function_exists( 'payu_get_first_active_config' ) ) {
+			$config = payu_get_first_active_config();
+		}
+		if ( ! $config || empty( $config->merchant_id ) ) {
+			return new WP_Error( 'no_config', __( 'No PayU configuration found.', 'payu-payment-links' ) );
+		}
+		if ( ! function_exists( 'payu_decrypt_client_secret' ) ) {
+			return new WP_Error( 'decrypt_missing', __( 'Unable to use stored credentials.', 'payu-payment-links' ) );
+		}
+		$client_secret = payu_decrypt_client_secret( $config->client_secret );
+		if ( false === $client_secret || '' === $client_secret ) {
+			return new WP_Error( 'decrypt_failed', __( 'Unable to use stored credentials.', 'payu-payment-links' ) );
+		}
+		if ( ! class_exists( 'PayU_Token_Manager' ) ) {
+			return new WP_Error( 'token_missing', __( 'Token manager not available.', 'payu-payment-links' ) );
+		}
+
+		$environment  = isset( $config->environment ) ? $config->environment : 'uat';
+		$api_base     = ( 'prod' === $environment ) ? 'https://oneapi.payu.in' : 'https://uatoneapi.payu.in';
+		$payu_invoice = $link->payu_invoice_number;
+		$url          = $api_base . '/payment-links/' . rawurlencode( $payu_invoice );
+
+		$token = PayU_Token_Manager::get_token_for_read_payment_link( $config->merchant_id, $config->client_id, $client_secret, $environment );
+		if ( is_wp_error( $token ) ) {
+			return $token;
+		}
+
+		$response = wp_remote_get(
+			$url,
+			array(
+				'timeout' => 35,
+				'headers' => array(
+					'Accept'        => 'application/json',
+					'Authorization' => 'Bearer ' . $token,
+					'merchantId'    => $config->merchant_id,
+				),
+			)
+		);
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$code = wp_remote_retrieve_response_code( $response );
+		$body = wp_remote_retrieve_body( $response );
+		$dec  = json_decode( $body, true );
+
+		if ( 401 === $code ) {
+			$scope   = PayU_Token_Manager::SCOPE_READ_PAYMENT_LINKS;
+			$scope   = function_exists( 'payu_normalize_scope_string' ) ? payu_normalize_scope_string( $scope ) : $scope;
+			$hash    = function_exists( 'payu_scope_hash' ) ? payu_scope_hash( $scope ) : hash( 'sha256', $scope );
+			$env_db  = PayU_Token_Manager::normalize_environment_for_db( $environment );
+			PayU_Token_Manager::invalidate_token( $config->merchant_id, $env_db, $hash );
+			$token = PayU_Token_Manager::get_token_for_read_payment_link( $config->merchant_id, $config->client_id, $client_secret, $environment );
+			if ( is_wp_error( $token ) ) {
+				return $token;
+			}
+			$response = wp_remote_get( $url, array(
+				'timeout' => 35,
+				'headers' => array(
+					'Accept'        => 'application/json',
+					'Authorization' => 'Bearer ' . $token,
+					'merchantId'    => $config->merchant_id,
+				),
+			) );
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+			$code = wp_remote_retrieve_response_code( $response );
+			$body = wp_remote_retrieve_body( $response );
+			$dec  = json_decode( $body, true );
+		}
+
+		if ( 200 !== $code && 201 !== $code ) {
+			$msg = isset( $dec['message'] ) ? $dec['message'] : ( isset( $dec['error_description'] ) ? $dec['error_description'] : __( 'PayU API error.', 'payu-payment-links' ) );
+			return new WP_Error( 'payu_api', $msg );
+		}
+		$api_status = isset( $dec['status'] ) ? (int) $dec['status'] : -1;
+		if ( 0 !== $api_status ) {
+			$msg = isset( $dec['message'] ) ? $dec['message'] : __( 'Payment link not found or error.', 'payu-payment-links' );
+			return new WP_Error( 'payu_result', $msg );
+		}
+
+		$result  = isset( $dec['result'] ) ? $dec['result'] : array();
+		$display = self::build_display_from_api_result( $result, $payu_invoice, $link );
+		$saved   = self::persist_api_response( (int) $link->id, $result, $body, $display, $payu_invoice );
+		if ( ! $saved ) {
+			return new WP_Error( 'payu_persist_failed', __( 'Failed to save payment status.', 'payu-payment-links' ) );
+		}
+
+		$udf2_invoice   = self::extract_udf2_invoice_number( $result );
+		$invoice_for_txn = $payu_invoice;
+		if ( $udf2_invoice !== '' && ( $udf2_invoice === $payu_invoice ) ) {
+			$invoice_for_txn = $udf2_invoice;
+		}
+		$date_from = isset( $link->created_at ) ? gmdate( 'Y-m-d', strtotime( $link->created_at ) ) : gmdate( 'Y-m-d', strtotime( '-30 days' ) );
+		$date_to   = gmdate( 'Y-m-d' );
+		$txn_list  = self::fetch_transaction_details( $invoice_for_txn, $date_from, $date_to, $config );
+		if ( is_array( $txn_list ) && count( $txn_list ) > 0 ) {
+			self::persist_transactions( (int) $link->id, $payu_invoice, $txn_list );
+		}
+
+		$expiry = isset( $display['expiry_date'] ) && is_string( $display['expiry_date'] ) ? $display['expiry_date'] : '';
+		$status_record = isset( $display['display_status'] ) ? strtoupper( (string) $display['display_status'] ) : 'PENDING';
+		$link_status   = isset( $display['payment_link_status'] ) ? sanitize_text_field( $display['payment_link_status'] ) : '';
+		return array(
+			'payment_link_id'     => (int) $link->id,
+			'status'             => $status_record,
+			'payment_link_status' => $link_status,
+			'paid_amount'         => isset( $display['amount_paid'] ) ? (string) number_format( (float) $display['amount_paid'], 2, '.', '' ) : '0.00',
+			'amount'              => isset( $display['total'] ) ? (string) number_format( (float) $display['total'], 2, '.', '' ) : '0.00',
+			'expiry_date'         => $expiry,
+			'currency'            => isset( $display['currency'] ) ? $display['currency'] : ( isset( $link->currency ) ? $link->currency : '' ),
+		);
+	}
+
+	/**
 	 * Format transaction list for status page display (transaction no, amount, status, date & time).
 	 * Includes rows with null transactionId (display as —). Date/time from createdOn (e.g. 2026-02-23 16:17:31.0).
 	 *
@@ -303,6 +455,12 @@ class PayU_Payment_Link_Status_Ajax {
 			$transaction_summary = wp_json_encode( $result['summary'] );
 		}
 
+		$expiry_date = '';
+		if ( ! empty( $result['expiryDate'] ) && is_string( $result['expiryDate'] ) ) {
+			$ts = strtotime( $result['expiryDate'] );
+			$expiry_date = $ts ? gmdate( 'Y-m-d H:i:s', $ts ) : '';
+		}
+
 		return array(
 			'display_status'       => $display_status,
 			'payment_link_status'  => $link_status,
@@ -314,6 +472,7 @@ class PayU_Payment_Link_Status_Ajax {
 			'order_id'             => $order_id,
 			'invoice'              => $invoice,
 			'transaction_summary'  => $transaction_summary,
+			'expiry_date'          => $expiry_date,
 		);
 	}
 
@@ -361,7 +520,7 @@ class PayU_Payment_Link_Status_Ajax {
 		if ( $total > 0 && $amount_paid > 0 && $amount_paid < $total ) {
 			return defined( 'PAYU_PAYMENT_STATUS_PARTIALLY_PAID' ) ? PAYU_PAYMENT_STATUS_PARTIALLY_PAID : 'PARTIALLY_PAID';
 		}
-		return defined( 'PAYU_PAYMENT_STATUS_FAILED' ) ? PAYU_PAYMENT_STATUS_FAILED : 'FAILED';
+		return defined( 'PAYU_PAYMENT_STATUS_PENDING' ) ? PAYU_PAYMENT_STATUS_PENDING : 'PENDING';
 	}
 
 	/**
@@ -456,6 +615,14 @@ class PayU_Payment_Link_Status_Ajax {
 			}
 		}
 
+		$expiry_date = null;
+		if ( ! empty( $display['expiry_date'] ) && is_string( $display['expiry_date'] ) ) {
+			$expiry_date = sanitize_text_field( $display['expiry_date'] );
+		} elseif ( ! empty( $result['expiryDate'] ) && is_string( $result['expiryDate'] ) ) {
+			$ts = strtotime( $result['expiryDate'] );
+			$expiry_date = $ts ? gmdate( 'Y-m-d H:i:s', $ts ) : null;
+		}
+
 		$cols = array(
 			'status'                 => $status,
 			'payment_link_status'    => $link_status,
@@ -467,6 +634,10 @@ class PayU_Payment_Link_Status_Ajax {
 			'updated_at'             => current_time( 'mysql' ), // WordPress timezone
 		);
 		$formats = array( '%s', '%s', '%f', '%f', '%f', '%s', '%s', '%s' );
+		if ( $expiry_date !== null ) {
+			$cols['expiry_date'] = $expiry_date;
+			$formats[]           = '%s';
+		}
 
 		$rows_affected = 0;
 		$row_id = (int) $row_id;
@@ -532,7 +703,7 @@ class PayU_Payment_Link_Status_Ajax {
 		), $url );
 
 		$response = wp_remote_get( $url, array(
-			'timeout' => 15,
+			'timeout' => 35,
 			'headers' => array(
 				'Accept'        => 'application/json',
 				'Authorization' => 'Bearer ' . $token,

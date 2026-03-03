@@ -29,16 +29,42 @@ class PayU_Create_Payment_Link_Page {
 	}
 
 	/**
-	 * Register the admin page (no menu item; accessible via URL only).
+	 * Register the admin page (hidden from menu; only reachable from order edit screen via URL).
+	 * Uses edit_shop_orders so any user who can edit orders can create payment links.
 	 */
 	public function register_page() {
 		add_submenu_page(
 			'woocommerce',
 			__( 'Create PayU Payment Link', 'payu-payment-links' ),
 			__( 'Create Payment Link', 'payu-payment-links' ),
-			'manage_woocommerce',
+			'edit_shop_orders',
 			self::PAGE_SLUG,
 			array( $this, 'render_page' )
+		);
+
+		add_action( 'admin_menu', array( $this, 'hide_submenu' ), 99 );
+		add_action( 'admin_menu', array( $this, 'register_standalone_hook' ), 999 );
+	}
+
+	/**
+	 * Register the page under the hook used when parent is empty (direct admin.php?page=... access).
+	 * Required because hide_submenu() removes the item from $submenu, so get_admin_page_parent()
+	 * no longer finds it and WordPress looks up admin_page_<slug> instead of woocommerce_page_<slug>.
+	 */
+	public function register_standalone_hook() {
+		if ( ! current_user_can( 'edit_shop_orders' ) ) {
+			return;
+		}
+		$hook = 'admin_page_' . self::PAGE_SLUG;
+		add_action( $hook, array( $this, 'render_page' ) );
+		global $_registered_pages;
+		$_registered_pages[ $hook ] = true;
+	}
+
+	public function hide_submenu() {
+		remove_submenu_page(
+			'woocommerce',
+			self::PAGE_SLUG
 		);
 	}
 
@@ -55,7 +81,7 @@ class PayU_Create_Payment_Link_Page {
 		if ( ! isset( $_POST[ self::NONCE_FIELD ] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST[ self::NONCE_FIELD ] ) ), self::NONCE_ACTION ) ) {
 			return;
 		}
-		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		if ( ! current_user_can( 'edit_shop_orders' ) ) {
 			return;
 		}
 		$order_id = isset( $_POST['payu_order_id'] ) ? absint( $_POST['payu_order_id'] ) : 0;
@@ -224,7 +250,7 @@ class PayU_Create_Payment_Link_Page {
 	 * Render the admin page (form).
 	 */
 	public function render_page() {
-		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		if ( ! current_user_can( 'edit_shop_orders' ) ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'payu-payment-links' ) );
 		}
 		$order_id = isset( $_GET['order_id'] ) ? absint( $_GET['order_id'] ) : 0;
@@ -276,7 +302,7 @@ class PayU_Create_Payment_Link_Page {
 		if ( 'admin_page_' . self::PAGE_SLUG !== $hook_suffix ) {
 			return;
 		}
-		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		if ( ! current_user_can( 'edit_shop_orders' ) ) {
 			return;
 		}
 		$plugin_url = plugin_dir_url( dirname( __FILE__ ) );
