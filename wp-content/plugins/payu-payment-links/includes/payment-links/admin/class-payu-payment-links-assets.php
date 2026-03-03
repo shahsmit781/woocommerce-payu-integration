@@ -19,20 +19,25 @@ class PayU_Payment_Links_Assets {
 		// Dashicons (icons)
 		wp_enqueue_style( 'dashicons' );
 
+		$js_file  = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'assets/js/payment-links-actions.js';
+		$css_file = PAYU_PAYMENT_LINKS_PLUGIN_DIR . 'assets/css/payment-links-admin.css';
+		$js_ver   = ( defined( 'PAYU_PAYMENT_LINKS_VERSION' ) ? PAYU_PAYMENT_LINKS_VERSION : '1.0.0' ) . '.' . ( file_exists( $js_file ) ? (string) filemtime( $js_file ) : time() );
+		$css_ver  = ( defined( 'PAYU_PAYMENT_LINKS_VERSION' ) ? PAYU_PAYMENT_LINKS_VERSION : '1.0.0' ) . '.' . ( file_exists( $css_file ) ? (string) filemtime( $css_file ) : time() );
+
 		// Admin CSS
 		wp_enqueue_style(
 			'payu-payment-links-admin',
 			PAYU_PAYMENT_LINKS_PLUGIN_URL . 'assets/css/payment-links-admin.css',
-			[],
-			PAYU_PAYMENT_LINKS_VERSION
+			[ 'dashicons' ],
+			$css_ver
 		);
 
-		// Admin JS
+		// Admin JS (version = plugin version + file mtime so browser loads fresh file after changes)
 		wp_enqueue_script(
 			'payu-payment-links-actions',
 			PAYU_PAYMENT_LINKS_PLUGIN_URL . 'assets/js/payment-links-actions.js',
 			[ 'jquery' ],
-			PAYU_PAYMENT_LINKS_VERSION,
+			$js_ver,
 			true
 		);
 

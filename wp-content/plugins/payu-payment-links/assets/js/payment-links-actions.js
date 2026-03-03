@@ -180,6 +180,7 @@
 			.done(function (res) {
 				if (res.success && res.data && res.data.expiry_date) {
 					var $rowToUpdate = $currentRow;
+					var linkIdToUpdate = currentLinkId;
 					closeExpiryModal();
 					// Update row in place when in DOM; then show success notice (no page reload)
 					var updated = false;
@@ -193,8 +194,6 @@
 							} else {
 								$cell.text(formatted);
 							}
-							var newVal = (res.data.expiry_date || '').replace(' ', 'T').substring(0, 16);
-							$rowToUpdate.find('.payu-expire-btn').attr('data-expiry-date', newVal);
 							var status = (res.data.status || '').toUpperCase();
 							if (status === 'EXPIRED') {
 								var $statusCell = $rowToUpdate.find('.column-status');
@@ -211,7 +210,11 @@
 									$linkStatusCell.text(linkLabel);
 								}
 							}
-							$rowToUpdate.find('.payu-expire-btn').addClass('payu-expire-btn-hidden').prop('disabled', true).attr('aria-hidden', 'true');
+							// Remove edit expiry icon only when same condition as refresh: link expired or payment not pending/partially_paid
+							var shouldHideExpiryBtn = paymentLinkStatus === 'expired' || (status !== 'PENDING' && status !== 'PARTIALLY_PAID');
+							if (shouldHideExpiryBtn && linkIdToUpdate) {
+								$rowToUpdate.find('button.payu-expire-btn[data-link-id="' + linkIdToUpdate + '"], button.payu-expiry-edit-btn[data-link-id="' + linkIdToUpdate + '"]').remove();
+							}
 							$cell.addClass('payu-cell-updated');
 							setTimeout(function () { $cell.removeClass('payu-cell-updated'); }, 2000);
 							updated = true;
@@ -566,15 +569,16 @@
 								$expiryCell.append('<span class="payu-expiry-display">' + (formatted || '—') + '</span>');
 							}
 						}
-						// Remove edit expiry icon when link is expired or payment is no longer PENDING/PARTIALLY_PAID
+						// Remove edit expiry button from DOM when it should not show (so icon never displays).
+						// Use data-link-id to target only the expiry edit button in this row (id = payment_link_id from refresh button).
 						var shouldHideExpiryBtn = paymentLinkStatus === 'expired' || (status !== 'PENDING' && status !== 'PARTIALLY_PAID');
 						if (shouldHideExpiryBtn) {
-							if ($expiryCell.length) {
-								$expiryCell.find('.payu-expire-btn, .payu-expiry-edit-btn').remove();
-							} else {
-								$row.find('.payu-expire-btn, .payu-expiry-edit-btn').remove();
-							}
+							$row.find('button.payu-expire-btn[data-link-id="' + id + '"]').remove();
+							$row.find('button.payu-expiry-edit-btn[data-link-id="' + id + '"]').remove();
+							$row.find('button[data-link-id="' + id + '"][data-invoice]').remove();
 						}
+						// Remove any expiry edit button that already has hidden class (e.g. from expiry modal)
+						$row.find('button.payu-expire-btn.payu-expire-btn-hidden, button.payu-expiry-edit-btn.payu-expire-btn-hidden').remove();
 						if (status === 'PAID' || status === 'EXPIRED') {
 							btn.addClass('payu-refresh-disabled').prop('disabled', true);
 						} else {
